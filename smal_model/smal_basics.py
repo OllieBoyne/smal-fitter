@@ -7,7 +7,7 @@ import pickle as pkl
 import sys, os, csv
 sys.path.append(os.path.dirname(sys.path[0]))
 
-model_dir = r"/data/cvfs/ob312/smal_fitter/smpl_models"
+model_dir = r"smal_model/smpl_model"
 
 def align_smal_template_to_symmetry_axis(v):
     # These are the indexes of the points that are on the symmetry axis

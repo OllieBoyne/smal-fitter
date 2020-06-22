@@ -1,4 +1,11 @@
 import numpy as np
+from matplotlib import pyplot as plt
+import os, torch
+
+def try_mkdir(loc):
+	if os.path.isdir(loc):
+		return None
+	os.mkdir(loc)
 
 def equal_3d_axes(ax, X, Y, Z, zoom=1.0):
 	"""
@@ -15,3 +22,77 @@ def equal_3d_axes(ax, X, Y, Z, zoom=1.0):
 	ax.set_xlim(mid_x - max_range, mid_x + max_range)
 	ax.set_ylim(mid_y - max_range, mid_y + max_range)
 	ax.set_zlim(mid_z - max_range, mid_z + max_range)
+
+
+def plot_pointcloud(ax, mesh, label="", colour="blue",
+					equalize=True, zoom=1.5):
+	"""Given a Meshes object, plots the mesh on ax (ax must have projection=3d).
+
+	equalize = adjust axis limits such that all axes are equal"""
+
+	verts = mesh.verts_packed()
+	x, y, z = verts.clone().detach().cpu().unbind(1)
+
+	s = ax.scatter3D(x, y, z, c=colour, label=label, alpha=0.3)
+
+	if equalize:
+		equal_3d_axes(ax, x, y, z, zoom=zoom)
+
+	return s, (x, y, z)
+
+
+def plot_pointclouds(target_meshes, src_meshes, mesh_names=[], title="", out_dir="static_fits_output/pointclouds"):
+	"""Plot and save fig of point clouds, with 3 figs side by side:
+	[target mesh, src_mesh, both]"""
+
+	for n in range(len(target_meshes)):
+		fig = plt.figure(figsize=(15, 5))
+		axes = [fig.add_subplot(int(f"13{n}"), projection="3d") for n in range(1, 4)]
+
+		for ax in axes:
+			ax.set_xlabel('x')
+			ax.set_ylabel('y')
+			ax.set_zlabel('z')
+
+		colours = ["green", "blue"]
+		labels = ["target", "SMAL"]
+		for i, mesh in enumerate([target_meshes[n], src_meshes[n]]):
+			for ax in [axes[1 + i == 1], axes[2]]:
+				plot_pointcloud(ax, mesh, colour=colours[i], label=labels[i])
+
+		for ax in axes:
+			ax.set_title(title)
+			ax.legend()
+
+		if mesh_names == []:
+			name = n
+		else:
+			name = mesh_names[n]
+
+		try_mkdir(out_dir)
+
+		plt.savefig(
+			f"{out_dir}/{name} - {title}.png")  # ADD BETTER NAMING CONVENTION TODO CONSIDER MESH NAMES (PASS THIS TO STAGE OBJECT?)
+		plt.close(fig)
+
+def cartesian_rotation(dim="x", rot=0):
+	"""Given a cartesian direction of rotation, and a rotation in radians, returns pytorch rotation matrix"""
+
+	i = "xyz".find(dim)
+	R = torch.eye(3)
+	if rot != 0:
+		j, k = (i + 1) % 3, (i + 2) % 3  # other two of cyclic triplet
+		R[j, j] = R[k, k] = np.cos(rot)
+		R[j, k] = - np.sin(rot)
+		R[k, j] = np.sin(rot)
+
+	return R
+
+def stack_as_batch(tensor: torch.Tensor, n_repeats=1, dim=0) -> torch.Tensor:
+	"""Inserts new dim dimension, and stacks tensor n times along that dimension"""
+	res = tensor.unsqueeze(dim)
+	repeats = [1] * res.ndim
+	repeats[dim] = n_repeats # repeat across target dimension
+	res = res.repeat(*repeats)
+	return res
+

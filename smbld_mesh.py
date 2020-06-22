@@ -11,18 +11,13 @@ sys.path.append(os.path.dirname(sys.path[0]))
 from smal_model.smal_torch import SMAL
 import torch
 from smal_model.batch_lbs import batch_rodrigues
-from matplotlib import pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
-from matplotlib.gridspec import GridSpec
-import tqdm
 import numpy as np
 import pickle
+from utils import stack_as_batch
+from pytorch_arap.arap import ARAPMeshes
 
 nn = torch.nn
 opts = flags.FLAGS
-
-# Set the device
-device = torch.device("cuda:0,1")
 
 kappa_map = {
     "front_left_leg": 7,
@@ -37,7 +32,7 @@ kappa_map = {
     "right_ear":34,
 }
 
-def batch_global_rigid_transformation(Rs, Js, parent, rotate_base = False, betas_extra=None, opts=None):
+def batch_global_rigid_transformation(Rs, Js, parent, rotate_base = False, betas_extra=None, device="cuda"):
     """
     Computes absolute joint locations given pose.
     rotate_base: if True, rotates the global rotation by 90 deg in x axis.
@@ -65,7 +60,7 @@ def batch_global_rigid_transformation(Rs, Js, parent, rotate_base = False, betas
 
     Js_orig = Js.clone()
 
-    scaling_factors = torch.ones(N, parent.shape[0], 3).cuda()
+    scaling_factors = torch.ones(N, parent.shape[0], 3).to(device)
     if betas_extra is not None:
         scaling_factors = betas_extra.reshape(-1, 35, 3)
         # debug_only
@@ -77,7 +72,7 @@ def batch_global_rigid_transformation(Rs, Js, parent, rotate_base = False, betas
     def make_A(R, t):
         # Rs is N x 3 x 3, ts is N x 3 x 1
         R_homo = torch.nn.functional.pad(R, (0,0,0,1,0,0))
-        t_homo = torch.cat([t, torch.ones([N, 1, 1]).cuda(device=Rs.device)], 1)
+        t_homo = torch.cat([t, torch.ones([N, 1, 1]).to(device)], 1)
         return torch.cat([R_homo, t_homo], 2)
     
     A0 = make_A(root_rotation, Js[:, 0])
@@ -107,7 +102,7 @@ def batch_global_rigid_transformation(Rs, Js, parent, rotate_base = False, betas
     # how much the bone moved (not the final location of the bone)
     # but (final_bone - init_bone)
     # ---
-    Js_w0 = torch.cat([Js_orig, torch.zeros([N, 35, 1, 1]).cuda(device=Rs.device)], 2)
+    Js_w0 = torch.cat([Js_orig, torch.zeros([N, 35, 1, 1]).to(device)], 2)
     init_bone = torch.matmul(results, Js_w0)
     # Append empty 4 x 3:
     init_bone = torch.nn.functional.pad(init_bone, (3,0,0,0,0,0,0,0))
@@ -115,18 +110,20 @@ def batch_global_rigid_transformation(Rs, Js, parent, rotate_base = False, betas
 
     return new_J, A
 
-class SMALMeshX(SMAL, nn.Module):
+class SMBLDMesh(SMAL, nn.Module):
     """SMAL Model, with addition of scale factors to individual body parts"""
 
-    def __init__(self, n_batch = 1, fixed_betas = False, device=device):
-        SMAL.__init__(self, pkl_path=r"/data/cvfs/ob312/smal_fitter/smpl_models/my_smpl_00781_4_all.pkl", opts = opts)
+    def __init__(self, n_batch = 1, fixed_betas = False, device="cuda"):
+        SMAL.__init__(self, pkl_path=r"smal_model/smpl_model/my_smpl_00781_4_all.pkl", opts = opts)
         nn.Module.__init__(self)
         
         self.use_smal_betas = True
         self.n_batch = n_batch
+        self.device = device
 
         self.faces = self.f
-        self.faces_batch = torch.FloatTensor(np.array([self.f] * n_batch).astype(np.float32)).cuda() # stack faces several times
+        faces_single = torch.from_numpy(self.faces.astype(np.float32)).to(device)
+        self.faces_batch = stack_as_batch(faces_single, n_batch)
 
         self.n_verts = self.v_template.shape[0]
 
@@ -136,8 +133,7 @@ class SMALMeshX(SMAL, nn.Module):
         self.trans = nn.Parameter(torch.full((n_batch, 3,), 0.0, device = device, requires_grad=True))
 
 
-        # sf is an N x 3 tensor, N is number of joints to deform, 3 is x, y, z
-        self.scale_factors = torch.nn.Parameter(torch.FloatTensor(np.ones((self.parents.shape[0]))),
+        self.scale_factors = torch.nn.Parameter(torch.ones((self.parents.shape[0])),
                                                 requires_grad = True)
 
         # This sets up a new set of betas that define the scale factor parameters
@@ -147,7 +143,7 @@ class SMALMeshX(SMAL, nn.Module):
         tail_joints = list(range(25, 32))
         ear_joints = [33, 34]
 
-        beta_scale_mask = torch.zeros(35, 3, 7).cuda()            
+        beta_scale_mask = torch.zeros(35, 3, 7).to(device)
         beta_scale_mask[leg_joints, [2], [0]] = 1.0 # Leg lengthening
         beta_scale_mask[leg_joints, [0], [1]] = 1.0 # Leg fatness
         beta_scale_mask[leg_joints, [1], [1]] = 1.0 # Leg fatness
@@ -164,16 +160,16 @@ class SMALMeshX(SMAL, nn.Module):
         self.fixed_betas = fixed_betas
 
         # Load mean betas from SMAL model
-        data_path = "/smal_model/smpl_model/my_smpl_data_00781_4_all.pkl"
+        data_path = "smal_model/smpl_model/my_smpl_data_00781_4_all.pkl"
         with open(data_path, "rb") as f:
             u = pickle._Unpickler(f)
             u.encoding = 'latin1'
             smal_data = u.load()
             shape_family = 1 # Canine is family=1
-            self.mean_betas = torch.FloatTensor(smal_data['cluster_means'][shape_family]).cuda()
+            self.mean_betas = torch.FloatTensor(smal_data['cluster_means'][shape_family]).to(device)
 
         multi_betas = self.mean_betas[:20]      
-        multi_betas_scale = torch.zeros(self.num_betascale).float().cuda()
+        multi_betas_scale = torch.zeros(self.num_betascale).float().to(device)
 
         multi_betas = torch.cat([multi_betas, multi_betas_scale], dim = 0)
 
@@ -181,8 +177,11 @@ class SMALMeshX(SMAL, nn.Module):
             self.multi_betas = nn.Parameter(multi_betas.repeat(1, 1))
         else:
             self.multi_betas = nn.Parameter(multi_betas.repeat(self.n_batch, 1))
-        
-        self.model_params = [self.global_rot, self.joint_rot, self.trans, self.multi_betas] # params of SMBDL model
+
+        self.deform_verts = nn.Parameter(torch.zeros((n_batch, self.n_verts, 3), device=device, requires_grad=True))
+
+        self.smbld_params = [self.global_rot, self.joint_rot, self.trans, self.multi_betas] # params of SMBDL model
+        self.deform_params = [self.deform_verts]
 
     def get_verts(self):
         """Returns vertices and faces of SMAL Model"""
@@ -199,17 +198,21 @@ class SMALMeshX(SMAL, nn.Module):
         #sf = self.scale_factors.repeat(self.n_batch, 1) # Stack Betas correctly if fixed across batch
 
         verts, joints_3d, R = self(
-                torch.cat([betas_pred, torch.zeros(self.n_batch, 41 - self.n_betas ).cuda()], dim = 1), # Pad remaining shape parameters with zeros
+                torch.cat([betas_pred, torch.zeros(self.n_batch, 41 - self.n_betas ).to(self.device)], dim = 1), # Pad remaining shape parameters with zeros
                 torch.cat((self.global_rot, self.joint_rot.view(self.n_batch, -1)), dim = 1),
-                betas_scale_pred.cuda(), self.trans)
+                betas_scale_pred.to(self.device), trans=self.trans, deform_verts=self.deform_verts)
 
         return verts, self.faces_batch # each of these have shape (n_batch, n_vert/faces, 3)
 
-    def get_meshes(self):
-        """Returns Meshes object of all SMAL meshes"""
+    def get_meshes(self, arap=False):
+        """Returns Meshes object of all SMAL meshes.
+        arap flag returns As-Rigid-As-Possible Mesh type, from pytorch_arap project"""
+
+        if arap:
+            return ARAPMeshes(*self.get_verts())
         return Meshes(*self.get_verts())
 
-    def __call__(self, beta, theta, betas_extra, trans=None, del_v=None, get_skin=True):
+    def __call__(self, beta, theta, betas_extra, deform_verts=None, trans=None, get_skin=True):
 
         if self.use_smal_betas: # Always use smal betas
             nBetas = beta.shape[1]
@@ -217,53 +220,53 @@ class SMALMeshX(SMAL, nn.Module):
             nBetas = 0
         # 1. Add shape blend shapes
         if nBetas > 0:
-            if del_v is None:
-                v_shaped = self.v_template.cuda() + torch.reshape(torch.matmul(beta.cpu(), self.shapedirs[:nBetas, :]),
-                                                           [-1, self.size[0], self.size[1]]).cuda()
+            if deform_verts is None:
+                v_shaped = self.v_template.to(self.device) + torch.reshape(torch.matmul(beta.cpu(), self.shapedirs[:nBetas, :]),
+                                                           [-1, self.size[0], self.size[1]]).to(self.device)
             else:
-                v_shaped = self.v_template + del_v + torch.reshape(torch.matmul(beta, self.shapedirs[:nBetas, :].cuda()),
-                                                                   [-1, self.size[0], self.size[1]]).cuda()
+                v_shaped = self.v_template + deform_verts + torch.reshape(torch.matmul(beta, self.shapedirs[:nBetas, :].to(self.device)),
+                                                                   [-1, self.size[0], self.size[1]]).to(self.device)
         else:
-            if del_v is None:
+            if deform_verts is None:
                 v_shaped = self.v_template.unsqueeze(0)
             else:
-                v_shaped = self.v_template + del_v
+                v_shaped = self.v_template + deform_verts
 
         # 2. Infer shape-dependent joint locations.
-        Jx = torch.matmul(v_shaped[:, :, 0], self.J_regressor.cuda())
-        Jy = torch.matmul(v_shaped[:, :, 1], self.J_regressor.cuda())
-        Jz = torch.matmul(v_shaped[:, :, 2], self.J_regressor.cuda())
+        Jx = torch.matmul(v_shaped[:, :, 0], self.J_regressor.to(self.device))
+        Jy = torch.matmul(v_shaped[:, :, 1], self.J_regressor.to(self.device))
+        Jz = torch.matmul(v_shaped[:, :, 2], self.J_regressor.to(self.device))
         J = torch.stack([Jx, Jy, Jz], dim=2)
         # 3. Add pose blend shapes
         # N x 24 x 3 x 3
-        Rs = torch.reshape(batch_rodrigues(torch.reshape(theta, [self.n_batch * 35, 3]).cpu()), [-1, 35, 3, 3]).cuda()
+        Rs = torch.reshape(batch_rodrigues(torch.reshape(theta, [self.n_batch * 35, 3]).cpu()), [-1, 35, 3, 3]).to(self.device)
 
         # Ignore global rotation.
-        pose_feature = torch.reshape(Rs[:, 1:, :, :].cuda() - torch.eye(3).cuda(), [-1, 306]) # torch.eye(3).cuda(device=self.opts.gpu_id)
+        pose_feature = torch.reshape(Rs[:, 1:, :, :].to(self.device) - torch.eye(3).to(self.device), [-1, 306]) # torch.eye(3).cuda(device=self.opts.gpu_id)
         v_posed = torch.reshape(
-            torch.matmul(pose_feature, self.posedirs.cuda()),
-            [-1, self.size[0], self.size[1]]) + v_shaped.cuda()
+            torch.matmul(pose_feature, self.posedirs.to(self.device)),
+            [-1, self.size[0], self.size[1]]) + v_shaped.to(self.device)
 
         # 4. Get the global joint location
         self.J_transformed, A = batch_global_rigid_transformation(Rs, J, self.parents,
-                                                                  betas_extra=betas_extra)
+                                                                  betas_extra=betas_extra, device=self.device)
         # 5. Do skinning:
         num_batch = theta.shape[0]
-        weights_t = self.weights.repeat([num_batch, 1]).cuda()
+        weights_t = self.weights.repeat([num_batch, 1]).to(self.device)
         W = torch.reshape(weights_t, [num_batch, -1, 35])
         T = torch.reshape(
             torch.matmul(W, torch.reshape(A, [num_batch, 35, 16])),
             [num_batch, -1, 4, 4])
         v_posed_homo = torch.cat(
-            [v_posed, torch.ones([num_batch, v_posed.shape[1], 1]).cuda()], 2) #.cuda(device=self.opts.gpu_id)
+            [v_posed, torch.ones([num_batch, v_posed.shape[1], 1]).to(self.device)], 2) #.cuda(device=self.opts.gpu_id)
         v_homo = torch.matmul(T, v_posed_homo.unsqueeze(-1))
         verts = v_homo[:, :, :3, 0]
         if trans is None:
-            trans = torch.zeros((num_batch, 3)).cuda()#.cuda(device=self.opts.gpu_id)
+            trans = torch.zeros((num_batch, 3)).to(self.device)#.cuda(device=self.opts.gpu_id)
         verts = verts + trans[:, None, :]
 
         # Get joints:
-        self.J_regressor = self.J_regressor.cuda()
+        self.J_regressor = self.J_regressor.to(self.device)
         joint_x = torch.matmul(verts[:, :, 0], self.J_regressor)
         joint_y = torch.matmul(verts[:, :, 1], self.J_regressor)
         joint_z = torch.matmul(verts[:, :, 2], self.J_regressor)
@@ -274,9 +277,11 @@ class SMALMeshX(SMAL, nn.Module):
         else:
             return joints
 
-    def numpy_save(self, out_dir):
-        """Given a directory, saves numpy arrays of each param"""
+    def save_npz(self, out_dir):
+        """Given a directory, saves a .npz file of all params"""
 
+        out = {}
         for param in ["global_rot", "joint_rot", "multi_betas", "trans"]:
-            arr = getattr(self, param).cpu().detach().numpy()
-            np.save(os.path.join(out_dir, param), arr)
+            out[param] = getattr(self, param).cpu().detach().numpy()
+
+        np.savez(os.path.join(out_dir, "smbld_params"), **out)
