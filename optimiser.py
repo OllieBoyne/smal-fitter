@@ -65,10 +65,11 @@ class Stage:
 
 		loss_arap = arap_loss(src_mesh, self.prev_verts, src_mesh.verts_padded())
 
-		loss = loss_chamfer * self.loss_weights["w_chamfer"] + loss_edge * self.loss_weights["w_edge"] + \
-			   loss_normal * self.loss_weights["w_normal"] + loss_laplacian * self.loss_weights["w_laplacian"] #+ \
-			#loss_arap * self.loss_weights["w_arap"]
 		# Weighted sum of the losses
+		loss = loss_chamfer * self.loss_weights["w_chamfer"] + loss_edge * self.loss_weights["w_edge"] + \
+			   loss_normal * self.loss_weights["w_normal"] + loss_laplacian * self.loss_weights["w_laplacian"] + \
+			loss_arap * self.loss_weights["w_arap"]
+
 
 		return loss
 
@@ -84,13 +85,14 @@ class Stage:
 		loss = self.loss(new_src_mesh, sample_target, sample_src)
 		self.losses.append(loss)
 
-		## Before stepping, save current verts for next step of ARAP
-		self.prev_verts,_ = self.SMBLD.get_verts()
+		with torch.no_grad():
+			## Before stepping, save current verts for next step of ARAP
+			self.prev_verts, _ = self.SMBLD.get_verts()
 
-		# Optimization step
-		loss.backward()
-		self.optimizer.step()
-		self.scheduler.step()  # Update LR
+			# Optimization step
+			loss.backward()
+			self.optimizer.step()
+			self.scheduler.step()  # Update LR
 
 		return loss
 

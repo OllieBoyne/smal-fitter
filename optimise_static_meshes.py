@@ -54,7 +54,7 @@ def optimise_to_static_meshes():
 	stage3 = Stage(nits, SMBLD.smbld_params + SMBLD.deform_params, SMBLD, name="3 - Deform",
 				   lr=5e-2, **stage_kwaargs)
 
-	stages = [stage1, stage2, stage3]
+	stages = [stage1]#, stage2, stage3]
 
 	out_dir = r"static_fits_output"
 
