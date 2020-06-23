@@ -11,7 +11,7 @@ from utils import plot_pointclouds, try_mkdir
 import torch
 from mesh_loader import load_target_meshes
 from pytorch3d.structures import Meshes
-from smbld_mesh import SMBLDMesh
+from smbld_model.smbld_mesh import SMBLDMesh
 from optimiser import Stage
 
 # Set the device
@@ -46,7 +46,7 @@ def optimise_to_static_meshes():
 		"loss_weights": dict(w_laplacian = 0)
 	}
 
-	nits = 10
+	nits = 1
 	stage1 = Stage(nits, SMBLD.smbld_params, SMBLD, name="1 - Initial fit", lr=1e-1, **stage_kwaargs)
 
 	stage2 = Stage(nits, SMBLD.smbld_params, SMBLD, name="2 - Refine", lr=5e-2, **stage_kwaargs)

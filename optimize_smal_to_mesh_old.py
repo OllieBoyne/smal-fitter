@@ -11,9 +11,7 @@ from mesh_loader import load_target_meshes
 from pytorch3d.structures import Meshes
 import numpy as np
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
-import matplotlib as mpl
-from smbld_mesh import SMBLDMesh
+from smbld_model.smbld_mesh import SMBLDMesh
 from optimiser import Stage
 
 # Set the device

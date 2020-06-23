@@ -8,7 +8,7 @@ from pytorch3d.loss import (
     mesh_normal_consistency,
 )
 from pytorch3d.structures import Meshes
-from pytorch_arap.arap import compute_energy as arap_loss
+from pytorch_arap.pytorch_arap.arap import compute_energy as arap_loss
 
 from tqdm import tqdm
 import torch
@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 from utils import plot_pointclouds
 import numpy as np
 import os
-from smbld_mesh import SMBLDMesh
+from smbld_model.smbld_mesh import SMBLDMesh
 
 default_weights = dict(w_chamfer=2.0, w_edge=1.0, w_normal=0.01, w_laplacian=0.1, w_scale=0.001, w_arap=0.01)
 
@@ -66,10 +66,11 @@ class Stage:
 		loss_arap = arap_loss(src_mesh, self.prev_verts, src_mesh.verts_padded())
 
 		# Weighted sum of the losses
-		loss = loss_chamfer * self.loss_weights["w_chamfer"] + loss_edge * self.loss_weights["w_edge"] + \
-			   loss_normal * self.loss_weights["w_normal"] + loss_laplacian * self.loss_weights["w_laplacian"] + \
-			loss_arap * self.loss_weights["w_arap"]
+		# loss = loss_chamfer * self.loss_weights["w_chamfer"] + loss_edge * self.loss_weights["w_edge"] + \
+		# 	   loss_normal * self.loss_weights["w_normal"] + loss_laplacian * self.loss_weights["w_laplacian"] + \
+		# 	loss_arap * self.loss_weights["w_arap"]
 
+		loss = loss_arap
 
 		return loss
 

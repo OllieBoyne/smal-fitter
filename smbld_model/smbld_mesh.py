@@ -6,15 +6,17 @@ With modifications now to work with:
 
 from absl import flags
 from pytorch3d.structures import Meshes
-import sys, os, csv
+import sys, os
+
 sys.path.append(os.path.dirname(sys.path[0]))
-from smal_model.smal_torch import SMAL
+from smbld_model.smal_model.smal_torch import SMAL
 import torch
-from smal_model.batch_lbs import batch_rodrigues
+from smbld_model.smal_model.smal_torch import batch_rodrigues
 import numpy as np
 import pickle
 from utils import stack_as_batch
-from pytorch_arap.arap import ARAPMeshes
+from pytorch_arap.pytorch_arap.arap import ARAPMeshes
+from smbld_model.config import SMPL_MODEL_PATH, SMPL_DATA_PATH
 
 nn = torch.nn
 opts = flags.FLAGS
@@ -114,7 +116,7 @@ class SMBLDMesh(SMAL, nn.Module):
     """SMAL Model, with addition of scale factors to individual body parts"""
 
     def __init__(self, n_batch = 1, fixed_betas = False, device="cuda"):
-        SMAL.__init__(self, pkl_path=r"smal_model/smpl_model/my_smpl_00781_4_all.pkl", opts = opts)
+        SMAL.__init__(self, pkl_path=SMPL_MODEL_PATH, opts = opts)
         nn.Module.__init__(self)
         
         self.use_smal_betas = True
@@ -160,7 +162,7 @@ class SMBLDMesh(SMAL, nn.Module):
         self.fixed_betas = fixed_betas
 
         # Load mean betas from SMAL model
-        data_path = "smal_model/smpl_model/my_smpl_data_00781_4_all.pkl"
+        data_path = SMPL_DATA_PATH
         with open(data_path, "rb") as f:
             u = pickle._Unpickler(f)
             u.encoding = 'latin1'
