@@ -1,4 +1,3 @@
-
-[submodule "pytorch-arap"]
-	path = pytorch-arap
+[submodule "pytorch_arap"]
+	path = pytorch_arap
 	url = https://github.com/OllieBoyne/pytorch-arap
