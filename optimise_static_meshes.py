@@ -7,7 +7,7 @@ Attempts to optimise the SMAL model such that the mesh best fits with the input 
 import sys, os
 
 sys.path.append(os.path.dirname(sys.path[0]))
-from utils import plot_pointclouds, try_mkdir
+from utils import plot_pointclouds, try_mkdir, try_mkdirs
 import torch
 from mesh_loader import load_target_meshes
 from pytorch3d.structures import Meshes
@@ -19,6 +19,10 @@ if torch.cuda.is_available():
 	device = torch.device("cuda:0,1")
 
 device = torch.device("cpu")
+
+targ_dirs = ["static_meshes", "static_fits_output"]
+try_mkdirs(targ_dirs) # produce targ dirs
+
 
 def optimise_to_static_meshes():
 	"""Individually optimise the SMAL model to 13 different target meshes, through a SMAL parameter optimisation stage and a vertex deformation stage. Save outputs as numpy arrays."""

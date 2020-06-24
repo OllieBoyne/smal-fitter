@@ -286,4 +286,5 @@ class SMBLDMesh(SMAL, nn.Module):
         for param in ["global_rot", "joint_rot", "multi_betas", "trans"]:
             out[param] = getattr(self, param).cpu().detach().numpy()
 
+        try_mkdir(out_dir)
         np.savez(os.path.join(out_dir, "smbld_params"), **out)

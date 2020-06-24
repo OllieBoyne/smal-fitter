@@ -7,6 +7,9 @@ def try_mkdir(loc):
 		return None
 	os.mkdir(loc)
 
+def try_mkdirs(locs):
+	for loc in locs: try_mkdir(loc)
+
 def equal_3d_axes(ax, X, Y, Z, zoom=1.0):
 	"""
 	For pyplot 3D axis, sets all axes to same lengthscale through trick found here:

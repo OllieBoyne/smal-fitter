@@ -1,5 +1,5 @@
 numpy>=1.18.1
-torch>=1.5.1+cpu
+torch>=1.5.1
 matplotlib>=3.2.0
 chumpy>=0.69
 scipy>=1.4.1
