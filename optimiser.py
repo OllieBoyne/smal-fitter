@@ -54,7 +54,10 @@ class Stage:
 		self.scheduler = torch.optim.lr_scheduler.LambdaLR(self.optimizer, lambda epoch: lr * (
 			lr_decay) ** epoch)  # Decay of learning rate
 
-		self.prev_verts,_ = SMBLD.get_verts()  # Get template verts to use for ARAP method
+		with torch.no_grad():
+			self.prev_mesh = self.SMBLD.get_meshes(arap=True)
+			self.prev_verts, _ = SMBLD.get_verts()  # Get template verts to use for ARAP method
+
 
 	def loss(self, src_mesh, sample_target, sample_src):
 		loss_chamfer, _ = chamfer_distance(sample_target,
@@ -63,14 +66,20 @@ class Stage:
 		loss_normal = mesh_normal_consistency(src_mesh)  # mesh normal consistency
 		loss_laplacian = mesh_laplacian_smoothing(src_mesh, method="uniform")  # mesh laplacian smoothing
 
-		loss_arap = arap_loss(src_mesh, self.prev_verts, src_mesh.verts_padded())
+		## if verts are undeformed from last iteration, no ARAP loss
+		verts_deformed = src_mesh.verts_padded()
+		if ((self.prev_verts - verts_deformed) ** 2).mean() == 0 or self.name=="1 - Initial fit":
+			loss_arap = 0   # no energy if vertices are not deformed
+		else:
+			loss_arap = arap_loss(self.prev_mesh, self.prev_verts, src_mesh.verts_padded())
+			print("USING ARAP", loss_chamfer, 0.001*loss_arap)
 
 		# Weighted sum of the losses
 		# loss = loss_chamfer * self.loss_weights["w_chamfer"] + loss_edge * self.loss_weights["w_edge"] + \
 		# 	   loss_normal * self.loss_weights["w_normal"] + loss_laplacian * self.loss_weights["w_laplacian"] + \
 		# 	loss_arap * self.loss_weights["w_arap"]
 
-		loss = loss_arap
+		loss = loss_chamfer + 0.001 * loss_arap
 
 		return loss
 
@@ -88,6 +97,7 @@ class Stage:
 
 		with torch.no_grad():
 			## Before stepping, save current verts for next step of ARAP
+			self.prev_mesh = self.SMBLD.get_meshes(arap=True)
 			self.prev_verts, _ = self.SMBLD.get_verts()
 
 			# Optimization step

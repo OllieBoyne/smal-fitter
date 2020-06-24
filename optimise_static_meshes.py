@@ -19,6 +19,7 @@ if torch.cuda.is_available():
 	device = torch.device("cuda:0,1")
 
 device = torch.device("cpu")
+torch.autograd.set_detect_anomaly(True)
 
 targ_dirs = ["static_meshes", "static_fits_output"]
 try_mkdirs(targ_dirs) # produce targ dirs
@@ -50,15 +51,15 @@ def optimise_to_static_meshes():
 		"loss_weights": dict(w_laplacian = 0)
 	}
 
-	nits = 1
+	nits = 2
 	stage1 = Stage(nits, SMBLD.smbld_params, SMBLD, name="1 - Initial fit", lr=1e-1, **stage_kwaargs)
 
 	stage2 = Stage(nits, SMBLD.smbld_params, SMBLD, name="2 - Refine", lr=5e-2, **stage_kwaargs)
 
-	stage3 = Stage(nits, SMBLD.smbld_params + SMBLD.deform_params, SMBLD, name="3 - Deform",
+	stage3 = Stage(nits, SMBLD.deform_params, SMBLD, name="3 - Deform",
 				   lr=5e-2, **stage_kwaargs)
 
-	stages = [stage1]#, stage2, stage3]
+	stages = [stage3]#, stage2, stage3]
 
 	out_dir = r"static_fits_output"
 
