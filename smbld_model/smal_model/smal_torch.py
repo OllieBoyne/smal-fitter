@@ -19,15 +19,17 @@ def undo_chumpy(x):
     return x if isinstance(x, np.ndarray) else x.r
 
 class SMAL(object):
-    def __init__(self, pkl_path, opts, dtype=torch.float):
+    def __init__(self, pkl_path, opts, shape_family_id=-1, dtype=torch.float):
         self.opts = opts
+        self.shape_family_id = shape_family_id
         # -- Load SMPL params --
         with open(pkl_path, "rb") as f:
             dd = pkl.load(f, fix_imports = True, encoding="latin1")
 
         self.f = dd['f']
 
-        v_template = get_horse_template(model_name='my_smpl_00781_4_all.pkl', data_name='my_smpl_data_00781_4_all.pkl')
+        v_template = get_horse_template(model_name='my_smpl_00781_4_all.pkl', data_name='my_smpl_data_00781_4_all.pkl',
+        shape_family_id = shape_family_id)
         v, self.left_inds, self.right_inds, self.center_inds = align_smal_template_to_symmetry_axis(v_template)
 
         # Mean template vertices

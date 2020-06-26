@@ -9,16 +9,49 @@ from pytorch3d.loss import (
 )
 from pytorch3d.structures import Meshes
 from pytorch_arap.pytorch_arap.arap import compute_energy as arap_loss
+from pytorch_arap.pytorch_arap.arap import ARAPMeshes
 
 from tqdm import tqdm
 import torch
 import matplotlib.pyplot as plt
-from utils import plot_pointclouds
+from utils import plot_pointclouds, plot_meshes
 import numpy as np
 import os
 from smbld_model.smbld_mesh import SMBLDMesh
+from time import perf_counter
 
-default_weights = dict(w_chamfer=2.0, w_edge=1.0, w_normal=0.01, w_laplacian=0.1, w_scale=0.001, w_arap=0.01)
+# default_weights = dict(w_chamfer=2.0, w_edge=1.0, w_normal=0.01, w_laplacian=0.1, w_scale=0.001, w_arap=0.001)
+default_weights = dict(w_chamfer=2.0, w_edge=0, w_normal=0, w_laplacian=0, w_arap=0)
+
+class StageManager:
+	"""Container for multiple stages of optimisation"""
+
+	def __init__(self, out_dir = "static_fits_output"):
+		self.stages = []
+		self.out_dir = out_dir
+
+	def run(self):
+		for n, stage in enumerate(self.stages):
+			stage.run(plot = True)
+
+	def plot_losses(self, out_src = "losses"):
+		"""Plot combined losses for all stages."""
+
+		fig, ax = plt.subplots()
+		it_start = 0 # track number of its
+		for stage in self.stages:
+			n_it = stage.n_it
+			ax.plot(np.arange(it_start, it_start+n_it), stage.losses, label=stage.name)
+			it_start += n_it
+
+		ax.legend()
+		out_src = os.path.join(self.out_dir, out_src+".png")
+		fig.savefig(out_src)
+		plt.close(fig)
+
+	def add_stage(self, stage):
+		self.stages.append(stage)
+
 
 class Stage:
 	"""Defines a stage of optimisation, the optimisation parameters for the stage, ..."""
@@ -42,7 +75,7 @@ class Stage:
 		self.mesh_names = mesh_names
 		self.SMBLD = SMBLD
 
-		self.loss_weights = default_weights
+		self.loss_weights = default_weights.copy()
 		if loss_weights is not None:
 			for k, v in loss_weights.items():
 				self.loss_weights[k] = v
@@ -55,55 +88,69 @@ class Stage:
 			lr_decay) ** epoch)  # Decay of learning rate
 
 		with torch.no_grad():
-			self.prev_mesh = self.SMBLD.get_meshes(arap=True)
+			self.prev_mesh = self.SMBLD.get_meshes()
 			self.prev_verts, _ = SMBLD.get_verts()  # Get template verts to use for ARAP method
 
+		self.n_verts = self.prev_verts.shape[1]
 
-	def loss(self, src_mesh, sample_target, sample_src):
-		loss_chamfer, _ = chamfer_distance(sample_target,
-										   sample_src)  # We compare the two sets of pointclouds by computing (a) the chamfer loss
-		loss_edge = mesh_edge_loss(src_mesh)  # and (b) the edge length of the predicted mesh
-		loss_normal = mesh_normal_consistency(src_mesh)  # mesh normal consistency
-		loss_laplacian = mesh_laplacian_smoothing(src_mesh, method="uniform")  # mesh laplacian smoothing
+		# Sample from target meshes - an equal number to the SMBLD mesh
+		self.target_verts = sample_points_from_meshes(self.target_meshes, 3000)
+
+		self.consider_loss = lambda loss_name: self.loss_weights[f"w_{loss_name}"] > 0 # function to check if loss is non-zero
+
+	def loss(self, src_mesh, src_verts):
+		loss = 0 
+		if self.consider_loss("chamfer"):
+			loss_chamfer, _ = chamfer_distance(self.target_verts,
+											src_verts)  # We compare the two sets of pointclouds by computing (a) the chamfer loss
+
+			loss += self.loss_weights["w_chamfer"] * loss_chamfer
+
+		if self.consider_loss("edge"):
+			loss_edge = mesh_edge_loss(src_mesh)  # and (b) the edge length of the predicted mesh
+			loss += self.loss_weights["w_edge"] * loss_edge
+
+		if self.consider_loss("normal"):
+			loss_normal = mesh_normal_consistency(src_mesh)  # mesh normal consistency
+			loss += self.loss_weights["w_normal"] * loss_normal
+
+		if self.consider_loss("laplacian"):
+			loss_laplacian = mesh_laplacian_smoothing(src_mesh, method="uniform")  # mesh laplacian smoothing
+			loss += self.loss_weights["w_laplacian"] * loss_normal	
+
+		if self.consider_loss("arap"):
+			for n in range(len(self.target_meshes)):
+				loss_arap = arap_loss(self.prev_mesh, self.prev_verts, src_verts, mesh_idx=n)
+				loss += self.loss_weights["w_arap"] * loss_arap
 
 		## if verts are undeformed from last iteration, no ARAP loss
-		verts_deformed = src_mesh.verts_padded()
-		if ((self.prev_verts - verts_deformed) ** 2).mean() == 0 or self.name=="1 - Initial fit":
-			loss_arap = 0   # no energy if vertices are not deformed
-		else:
-			loss_arap = arap_loss(self.prev_mesh, self.prev_verts, src_mesh.verts_padded())
-			print("USING ARAP", loss_chamfer, 0.001*loss_arap)
-
-		# Weighted sum of the losses
-		# loss = loss_chamfer * self.loss_weights["w_chamfer"] + loss_edge * self.loss_weights["w_edge"] + \
-		# 	   loss_normal * self.loss_weights["w_normal"] + loss_laplacian * self.loss_weights["w_laplacian"] + \
-		# 	loss_arap * self.loss_weights["w_arap"]
-
-		loss = loss_chamfer + 0.001 * loss_arap
+		# if ((self.prev_verts - src_verts) ** 2).mean() == 0 or self.loss_weights["w_arap"] == 0:
+		# 	loss_arap = 0   # no energy if vertices are not deformed
+		# else:
+			
 
 		return loss
 
 	def step(self, epoch):
 		"""Runs step of Stage, calculating loss, and running the optimiser"""
 
-		new_src_mesh = self.SMBLD.get_meshes(arap=True)
+		src_verts, src_faces = self.SMBLD.get_verts()
+		new_src_mesh = ARAPMeshes(src_verts, src_faces)
 
-		# We sample 5k points from the surface of each mesh
-		sample_target = sample_points_from_meshes(self.target_meshes, 3000)
-		sample_src = sample_points_from_meshes(new_src_mesh, 3000)
-
-		loss = self.loss(new_src_mesh, sample_target, sample_src)
+		loss = self.loss(new_src_mesh, src_verts)
 		self.losses.append(loss)
 
 		with torch.no_grad():
 			## Before stepping, save current verts for next step of ARAP
-			self.prev_mesh = self.SMBLD.get_meshes(arap=True)
-			self.prev_verts, _ = self.SMBLD.get_verts()
+			self.prev_mesh = new_src_mesh.clone()
+			self.prev_verts = src_verts.clone()
 
-			# Optimization step
-			loss.backward()
-			self.optimizer.step()
-			self.scheduler.step()  # Update LR
+		# Optimization step
+		loss.backward()
+
+		self.optimizer.step()
+		self.scheduler.step()  # Update LR
+
 
 		return loss
 
@@ -118,12 +165,7 @@ class Stage:
 				tqdm_iterator.set_description(f"STAGE = {self.name}, LOSS = {loss:.6f}")  # Print the losses
 
 		if plot:
-			plot_pointclouds(self.target_meshes, self.SMBLD.get_meshes(), self.mesh_names, title=self.name,
+			figtitle = f"{self.name}, its = {self.n_it}"
+			plot_meshes(self.target_meshes, self.SMBLD.get_meshes(), self.mesh_names, title=self.name, figtitle=figtitle,
 							 out_dir=os.path.join(self.out_dir, "pointclouds"))
 
-	def plot_losses(self, out_src):
-		"""Plots losses against iterations, saves under out_src"""
-		fig, ax = plt.subplots()
-		plt.plot(self.losses)
-		fig.savefig(out_src)
-		plt.close(fig)

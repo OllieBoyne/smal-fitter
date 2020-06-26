@@ -115,10 +115,10 @@ def batch_global_rigid_transformation(Rs, Js, parent, rotate_base = False, betas
 class SMBLDMesh(SMAL, nn.Module):
     """SMAL Model, with addition of scale factors to individual body parts"""
 
-    def __init__(self, n_batch = 1, fixed_betas = False, device="cuda"):
-        SMAL.__init__(self, pkl_path=SMPL_MODEL_PATH, opts = opts)
+    def __init__(self, n_batch = 1, fixed_betas = False, device="cuda", shape_family_id = 1):
+        SMAL.__init__(self, pkl_path=SMPL_MODEL_PATH, opts = opts, shape_family_id=shape_family_id)
         nn.Module.__init__(self)
-        
+      
         self.use_smal_betas = True
         self.n_batch = n_batch
         self.device = device
@@ -167,8 +167,11 @@ class SMBLDMesh(SMAL, nn.Module):
             u = pickle._Unpickler(f)
             u.encoding = 'latin1'
             smal_data = u.load()
-            shape_family = 1 # Canine is family=1
-            self.mean_betas = torch.FloatTensor(smal_data['cluster_means'][shape_family]).to(device)
+            shape_family = self.shape_family_id # Canine is family=1
+            if shape_family == -1:
+                self.mean_betas = torch.zeros((41)).to(device)
+            else:
+                self.mean_betas = torch.FloatTensor(smal_data['cluster_means'][shape_family]).to(device)
 
         multi_betas = self.mean_betas[:20]      
         multi_betas_scale = torch.zeros(self.num_betascale).float().to(device)
@@ -184,6 +187,8 @@ class SMBLDMesh(SMAL, nn.Module):
 
         self.smbld_params = [self.global_rot, self.joint_rot, self.trans, self.multi_betas] # params of SMBDL model
         self.deform_params = [self.deform_verts]
+
+        self.meshes = ARAPMeshes(*self.get_verts())
 
     def get_verts(self):
         """Returns vertices and faces of SMAL Model"""
@@ -206,13 +211,15 @@ class SMBLDMesh(SMAL, nn.Module):
 
         return verts, self.faces_batch # each of these have shape (n_batch, n_vert/faces, 3)
 
-    def get_meshes(self, arap=False):
-        """Returns Meshes object of all SMAL meshes.
-        arap flag returns As-Rigid-As-Possible Mesh type, from pytorch_arap project"""
+    def get_meshes(self):
+        """Returns Meshes object of all SMAL meshes."""
 
-        if arap:
-            return ARAPMeshes(*self.get_verts())
-        return Meshes(*self.get_verts())
+        # self.meshes.update_padded(self.get_verts()[0])
+        self.meshes = ARAPMeshes(*self.get_verts())
+
+        return self.meshes
+
+
 
     def __call__(self, beta, theta, betas_extra, deform_verts=None, trans=None, get_skin=True):
 

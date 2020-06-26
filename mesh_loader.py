@@ -17,7 +17,7 @@ def load_target_meshes(mesh_dir, sorting = lambda arr: arr, n_meshes=None, frame
 	if n_meshes is not None: obj_list = obj_list[:n_meshes]
 	obj_list = obj_list[::frame_step]
 
-	for obj_file in obj_list[:1]:
+	for obj_file in obj_list:
 		mesh_names.append(obj_file[:-4]) # Get name of mesh
 		target_obj = os.path.join(mesh_dir, obj_file)
 		verts, faces, aux = load_obj(target_obj, load_textures=False) # Load mesh with no textures

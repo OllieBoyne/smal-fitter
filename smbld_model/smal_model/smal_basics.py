@@ -44,17 +44,24 @@ def load_smal_model(model_name='my_smpl_00781_4_all.pkl'):
    
     return v, model.f
 
-def get_horse_template(model_name='my_smpl_00781_4_all.pkl', data_name='my_smpl_data_00781_4_all.pkl'):
+def get_horse_template(model_name='my_smpl_00781_4_all.pkl', data_name='my_smpl_data_00781_4_all.pkl',
+shape_family_id=-1):
 
     model_path = os.path.join(model_dir, model_name)
     model = load_model(model_path)
     nBetas = len(model.betas.r)
     data_path = os.path.join(model_dir, 'my_smpl_data_00781_4_all.pkl')
     data = pkl.load(open(data_path, "rb"), fix_imports=True, encoding="latin-1")
-    # Select average dog
-    betas = data['cluster_means'][1][:nBetas]
+
+    # Select average for shape family (0=cat, 1=dog, 2=hours)
+    betas = data['cluster_means'][shape_family_id][:nBetas]
     model.betas[:] = betas
+
+    if shape_family_id == -1:
+        model.betas[:] = np.zeros_like(betas)
+
     v = model.r.copy()
+
     return v
 
 
