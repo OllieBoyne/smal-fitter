@@ -33,10 +33,11 @@ def plot_mesh(ax, mesh: Meshes, label="", colour="blue", equalize=True, zoom=1.5
 
 	verts = mesh.verts_padded()
 	faces = mesh.faces_padded()
-	arap_utils.plot_meshes(ax, verts, faces, color=colour, change_lims=equalize, zoom=zoom, prop=False,
+	trisurfs = arap_utils.plot_meshes(ax, verts, faces, color=colour, change_lims=equalize, zoom=zoom, prop=False,
 			alpha = alpha)
 	ax.plot([], [], color=colour, label=label)
 
+	return trisurfs
 
 def plot_meshes(target_meshes, src_meshes, mesh_names=[], title="", figtitle="", out_dir="static_fits_output/pointclouds"):
 	"""Plot and save fig of point clouds, with 3 figs side by side:
@@ -145,3 +146,7 @@ def stack_as_batch(tensor: torch.Tensor, n_repeats=1, dim=0) -> torch.Tensor:
 	res = res.repeat(*repeats)
 	return res
 
+def save_animation(fig, func, n_frames, fmt="gif", fps=15, title="output", callback=True, **kwargs):
+	"""Save matplotlib animation."""
+
+	arap_utils.save_animation(fig, func, n_frames, fmt="gif", fps=15, title="output", callback=True, **kwargs )

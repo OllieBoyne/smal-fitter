@@ -115,10 +115,12 @@ def batch_global_rigid_transformation(Rs, Js, parent, rotate_base = False, betas
 class SMBLDMesh(SMAL, nn.Module):
     """SMAL Model, with addition of scale factors to individual body parts"""
 
-    def __init__(self, n_batch = 1, fixed_betas = False, device="cuda", shape_family_id = 1):
-        SMAL.__init__(self, pkl_path=SMPL_MODEL_PATH, opts = opts, shape_family_id=shape_family_id)
+    def __init__(self, n_batch = 1, fixed_betas = False, device="cuda", shape_family_id = 1,
+    model_path = SMPL_MODEL_PATH, data_path = SMPL_DATA_PATH):
+        SMAL.__init__(self, pkl_path=model_path, opts = opts, shape_family_id=shape_family_id)
         nn.Module.__init__(self)
-      
+    
+
         self.use_smal_betas = True
         self.n_batch = n_batch
         self.device = device
@@ -162,7 +164,6 @@ class SMBLDMesh(SMAL, nn.Module):
         self.fixed_betas = fixed_betas
 
         # Load mean betas from SMAL model
-        data_path = SMPL_DATA_PATH
         with open(data_path, "rb") as f:
             u = pickle._Unpickler(f)
             u.encoding = 'latin1'
@@ -286,12 +287,20 @@ class SMBLDMesh(SMAL, nn.Module):
         else:
             return joints
 
-    def save_npz(self, out_dir):
+    def save_npz(self, out_dir, title=""):
         """Given a directory, saves a .npz file of all params"""
 
         out = {}
         for param in ["global_rot", "joint_rot", "multi_betas", "trans"]:
             out[param] = getattr(self, param).cpu().detach().numpy()
 
+        v, f = self.get_verts()
+        out["verts"] = v.cpu().detach().numpy()
+        out["faces"] = f.cpu().detach().numpy()
+
+        out_title = "smbld_params.npz"
+        if title != "":
+            out_title = out_title.replace(".npz", f"_{title}.npz")
+
         try_mkdir(out_dir)
-        np.savez(os.path.join(out_dir, "smbld_params"), **out)
+        np.savez(os.path.join(out_dir, out_title), **out)

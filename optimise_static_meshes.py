@@ -32,7 +32,7 @@ def optimise_to_static_meshes(arap = True):
 	mesh_names, target_meshes = load_target_meshes(mesh_dir=r"static_meshes", device=device)
 
 	## only take first mesh for now
-	mesh_names, target_meshes = mesh_names[:3], target_meshes[:3]
+	# mesh_names, target_meshes = mesh_names[:3], target_meshes[:3]
 
 	n_batch = batch_size = len(target_meshes)  # Size of all meshes in batch
 
@@ -55,16 +55,19 @@ def optimise_to_static_meshes(arap = True):
 		w_laplacian=0, w_arap=0.000, w_normal=0.00, w_edge=0.00,
 	)
 
-	if arap: deform_weights["w_arap"] = 0.001
+	if arap: 
+		deform_weights["w_arap"] = 0.0001
+		deform_weights["w_normal"] = 0.0002
+		deform_weights["w_laplacian"] = 0.0001
 
 	manager = StageManager(out_dir=out_dir)
 
-	nits = 200
-	manager.add_stage( Stage(50, SMBLD.smbld_params, SMBLD, name="1 - Initial fit", lr=1e-1, **stage_kwaargs) )
+	nits = 300
+	manager.add_stage( Stage(100, SMBLD.smbld_params, SMBLD, name="1 - Initial fit", lr=1e-1, **stage_kwaargs) )
 	manager.add_stage( Stage(nits, SMBLD.smbld_params, SMBLD, name="2 - Refine", lr=1e-3,  **stage_kwaargs) )
 	name = "3 - deform arap" if arap else "3 - deform"
-	manager.add_stage( Stage(nits, SMBLD.deform_params, SMBLD, name=name, loss_weights=deform_weights,
-				   lr=1e-2, **stage_kwaargs) )
+	manager.add_stage( Stage(150, SMBLD.deform_params, SMBLD, name=name, loss_weights=deform_weights,
+				   lr=2e-2, **stage_kwaargs) )
 
 	manager.run()
 	manager.plot_losses()
@@ -73,7 +76,7 @@ def optimise_to_static_meshes(arap = True):
 
 	# Save all SMAL params
 	try_mkdir(out_dir)
-	SMBLD.save_npz(out_dir)
+	SMBLD.save_npz(out_dir, title=f"{['', 'arap'][arap]}")
 
 
 if __name__ == "__main__":
