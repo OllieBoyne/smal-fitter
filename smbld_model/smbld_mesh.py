@@ -116,8 +116,9 @@ class SMBLDMesh(SMAL, nn.Module):
     """SMAL Model, with addition of scale factors to individual body parts"""
 
     def __init__(self, n_batch = 1, fixed_betas = False, device="cuda", shape_family_id = 1,
-    model_path = SMPL_MODEL_PATH, data_path = SMPL_DATA_PATH, **kwargs):
-        SMAL.__init__(self, pkl_path=model_path, opts = opts, shape_family_id=shape_family_id)
+    model_path = SMPL_MODEL_PATH, data_path = SMPL_DATA_PATH, num_betas=20, **kwargs):
+        SMAL.__init__(self, model_path=model_path, data_path=data_path, opts = opts, shape_family_id=shape_family_id,
+                      align = False)
         nn.Module.__init__(self)
     
         self.use_smal_betas = True
@@ -163,6 +164,11 @@ class SMBLDMesh(SMAL, nn.Module):
 
         self.fixed_betas = fixed_betas
 
+        self.num_betas = num_betas # number of used betas
+
+        max_betas = self.shapedirs.shape[0]
+        assert max_betas >= self.num_betas, f"Insufficient number of betas in shapedir (Requested {self.num_betas}, shapedir has {max_betas})"
+
         # Load mean betas from SMAL model
         with open(data_path, "rb") as f:
             u = pickle._Unpickler(f)
@@ -172,9 +178,12 @@ class SMBLDMesh(SMAL, nn.Module):
             if shape_family == -1:
                 self.mean_betas = torch.zeros((41)).to(device)
             else:
-                self.mean_betas = torch.FloatTensor(smal_data['cluster_means'][shape_family]).to(device)
+                loaded_betas = smal_data['cluster_means'][shape_family]
+                if len(loaded_betas) < max_betas:
+                    loaded_betas = np.pad(loaded_betas, (0, self.num_betas-len(loaded_betas))) # pad with 0s to max shape
+                self.mean_betas = torch.FloatTensor(loaded_betas).to(device)
 
-        multi_betas = self.mean_betas[:20]      
+        multi_betas = self.mean_betas[:self.num_betas]
         multi_betas_scale = torch.zeros(self.num_betascale).float().to(device)
 
         multi_betas = torch.cat([multi_betas, multi_betas_scale], dim = 0)
@@ -198,15 +207,14 @@ class SMBLDMesh(SMAL, nn.Module):
 
         # Split betas by standard betas, and scale factor betas
         all_betas = self.multi_betas
-        betas_pred = all_betas[:, :20] # usual betas
-        betas_logscale = all_betas[:, 20:] # Scale factor betas
+        betas_pred = all_betas[:, :self.num_betas] # usual betas
+        betas_logscale = all_betas[:, self.num_betas:] # Scale factor betas
         betas_scale_pred = torch.exp(betas_logscale @ self.beta_scale_mask) # Scale SF betas correctly
 
         #betas = betas_pred.repeat(self.n_batch, 1) # Stack Betas correctly if fixed across batch
         #sf = self.scale_factors.repeat(self.n_batch, 1) # Stack Betas correctly if fixed across batch
 
-        verts, joints_3d, R = self(
-                torch.cat([betas_pred, torch.zeros(self.n_batch, 41 - self.n_betas ).to(self.device)], dim = 1), # Pad remaining shape parameters with zeros
+        verts, joints_3d, R = self(betas_pred,
                 torch.cat((self.global_rot, self.joint_rot.view(self.n_batch, -1)), dim = 1),
                 betas_scale_pred.to(self.device), trans=self.trans, deform_verts=self.deform_verts)
 

@@ -32,7 +32,9 @@ def produce_new_shapedir(verts, n_betas=20):
     pca = PCA(n_components = K)
 
     fit = pca.fit(offsets)
-    shapedir = fit.components_.T
+    vecs = fit.components_ * fit.singular_values_[:, None]**.5 # multiply principal unit vectors by variance
+
+    shapedir = vecs.T.reshape(V, 3, K)
 
     return v_template, shapedir
 
@@ -47,8 +49,9 @@ def get_betas(verts, v_template, shapedir):
     :return betas: (N x nbetas)"""
 
     N, V, _ = verts.shape
-    _, B = shapedir.shape
+    *_, B = shapedir.shape
 
+    shapedir = shapedir.reshape(3*V, B)
     offsets = (verts - v_template).reshape(N, 3*V)
 
     betas = np.zeros((N, B))
@@ -98,11 +101,19 @@ def save_new_model(verts, n_betas=20, out_dir = "smbld_model/new_model",
     with open(outfile_data, "wb") as outfile:
         pkl.dump(data, outfile)
 
+def check_shapes():
+    """Check shapes of everything in model files"""
+    for model in ["smbld_model/new_model/model.pkl", SMPL_MODEL_PATH]:
+        print("----")
+        print(model)
+        with open(model, "rb") as f:
+            dd = pkl.load(f, fix_imports = True, encoding="latin1")
+            for k in dd.keys():
+                print(k, getattr(dd[k], "shape", "n/a"))
 
   
 if __name__ == "__main__":
 
     data = np.load("static_fits_output/smbld_params_arap.npz")
     verts = data["verts"]
-
     save_new_model(verts)

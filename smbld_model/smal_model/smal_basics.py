@@ -4,6 +4,8 @@ import numpy as np
 from .smpl_webuser.serialization import load_model
 import pickle as pkl
 
+from smbld_model.config import SMPL_DATA_PATH, SMPL_MODEL_PATH
+
 import sys, os, csv
 sys.path.append(os.path.dirname(sys.path[0]))
 
@@ -35,22 +37,19 @@ def align_smal_template_to_symmetry_axis(v):
 
     return v, left_inds, right_inds, center_inds
 
-def load_smal_model(model_name='my_smpl_00781_4_all.pkl'):
-    model_path = os.path.join(model_dir, model_name)
-
+def load_smal_model(model_path=SMPL_MODEL_PATH):
     model = load_model(model_path)
     v = align_smal_template_to_symmetry_axis(model.r.copy())
 
-   
+
     return v, model.f
 
-def get_horse_template(model_name='my_smpl_00781_4_all.pkl', data_name='my_smpl_data_00781_4_all.pkl',
+def get_horse_template(model_path=SMPL_MODEL_PATH, data_path=SMPL_DATA_PATH,
 shape_family_id=-1):
 
-    model_path = os.path.join(model_dir, model_name)
+    model_path = model_path
     model = load_model(model_path)
     nBetas = len(model.betas.r)
-    data_path = os.path.join(model_dir, 'my_smpl_data_00781_4_all.pkl')
     data = pkl.load(open(data_path, "rb"), fix_imports=True, encoding="latin-1")
 
     # Select average for shape family (0=cat, 1=dog, 2=hours)
