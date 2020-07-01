@@ -149,4 +149,4 @@ def stack_as_batch(tensor: torch.Tensor, n_repeats=1, dim=0) -> torch.Tensor:
 def save_animation(fig, func, n_frames, fmt="gif", fps=15, title="output", callback=True, **kwargs):
 	"""Save matplotlib animation."""
 
-	arap_utils.save_animation(fig, func, n_frames, fmt="gif", fps=15, title="output", callback=True, **kwargs )
+	arap_utils.save_animation(fig, func, n_frames, fmt="gif", fps=fps, title="output", callback=True, **kwargs )

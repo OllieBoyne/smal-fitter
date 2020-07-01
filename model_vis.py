@@ -1,47 +1,63 @@
 """Visualise a generated SMAL type model, producing animations of changing key parameters"""
 
-from smbld_model.config import SMPL_DATA_PATH, SMPL_MODEL_PATH
+from smbld_model.config import SMPL_DATA_PATH, SMPL_MODEL_PATH, NEW_MODEL_PATH, NEW_DATA_PATH
 from smbld_model.smbld_mesh import SMBLDMesh
 import numpy as np
+import torch
 
 from matplotlib import pyplot as plt
 from utils import plot_mesh, save_animation
 
 models = {
-    "default": dict(data_path = SMPL_DATA_PATH, model_path = SMPL_MODEL_PATH),
-    "new": dict()
-}
+	"default": dict(name="default_smal", data_path=SMPL_DATA_PATH, model_path=SMPL_MODEL_PATH,
+					shape_family_id=-1, num_betas = 20),
+	"new": dict(name="new_model", data_path=NEW_DATA_PATH, model_path=NEW_MODEL_PATH,
+					shape_family_id=0, num_betas=13)
+} ## Model name : SMBLDMesh kwargs
 
-def vis_shape_params(data_path, model_path, fps = 15):
-    """Load SMBLD model. Wiggle each shape param in turn"""
+# Set the device
+if torch.cuda.is_available():
+	device = torch.device("cuda:0,1")
 
-    mesh = SMBLDMesh(model_path=model_path, data_path = data_path)
+else:
+	device = torch.device("cpu")
 
-    fig, ax = plt.subplots(subplot_kw={"projection":"3d"})
-    trisurfs = []
+def vis_shape_params(name="default", num_betas=20, fps=15, **model_kwargs):
+	"""Load SMBLD model. Wiggle each shape param in turn"""
 
-    num_steps = 10
-    num_betas = 20
+	mesh = SMBLDMesh(**model_kwargs, device = device)
 
-    shape_range = np.linspace(-1, 1, num_steps)
-    n_frames = num_steps * num_betas
+	fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
+	trisurfs = []
 
-    def anim(i):
-        [t.remove() for t in trisurfs]  # clear existing meshes
-        
-        ### update SMBLD
-        cur_beta_idx = i // num_steps
-        cur_step = i % num_steps
-        val = shape_range[cur_step]
+	num_steps = N = 2 * fps
+	num_betas = 13
 
-        mesh.multi_betas[0, cur_beta_idx] = val  # Update betas
-        plot_mesh(ax, mesh.get_meshes()) # get mesh
+	## shape range goes from 0 -> 1 -> -1 -> 0 in equally spaced steps
+	shape_range = np.concatenate([np.linspace(0, 1, num_steps//4), np.linspace(1, -1, num_steps//2), np.linspace(-1, 0, num_steps//4)])
+	shape_range = np.pad(shape_range, (0, N - len(shape_range))) # pad to size N
+	n_frames = num_steps * num_betas
 
-        ### update text
-        fig.suptitle(f"S{cur_beta_idx} : {val:.3f}")
+	## plot blank mesh
+	trisurfs = plot_mesh(ax, mesh.get_meshes())
 
-    save_animation(fig, anim, n_frames=n_frames, fmt="gif", title="model_shape_param", fps = fps)
+	def anim(i):
+		[t.remove() for t in trisurfs]  # clear existing meshes
+
+		### update SMBLD
+		cur_beta_idx = i // num_steps
+		cur_step = i % num_steps
+		val = shape_range[cur_step]
+
+		mesh.multi_betas[0, cur_beta_idx] = val  # Update betas
+		trisurfs[:] = plot_mesh(ax, mesh.get_meshes(), equalize = False) # get new mesh
+
+		### update text
+		fig.suptitle(f"{name.title()}\nS{cur_beta_idx} : {val:+.2f}", fontsize=30)
+
+	ax.axis("off")
+	save_animation(fig, anim, n_frames=n_frames, fmt="gif", title=f"{name}_shape_param", fps=fps)
+
 
 if __name__ == "__main__":
-
-    vis_shape_params(**models["default"], fps = 2)
+	vis_shape_params("new", fps=15)

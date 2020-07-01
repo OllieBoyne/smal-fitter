@@ -116,7 +116,7 @@ class SMBLDMesh(SMAL, nn.Module):
     """SMAL Model, with addition of scale factors to individual body parts"""
 
     def __init__(self, n_batch = 1, fixed_betas = False, device="cuda", shape_family_id = 1,
-    model_path = SMPL_MODEL_PATH, data_path = SMPL_DATA_PATH):
+    model_path = SMPL_MODEL_PATH, data_path = SMPL_DATA_PATH, **kwargs):
         SMAL.__init__(self, pkl_path=model_path, opts = opts, shape_family_id=shape_family_id)
         nn.Module.__init__(self)
     
@@ -189,7 +189,7 @@ class SMBLDMesh(SMAL, nn.Module):
         self.smbld_params = [self.global_rot, self.joint_rot, self.trans, self.multi_betas] # params of SMBDL model
         self.deform_params = [self.deform_verts]
 
-        self.meshes = ARAPMeshes(*self.get_verts())
+        self.meshes = self.get_meshes()
 
     def get_verts(self):
         """Returns vertices and faces of SMAL Model"""
@@ -215,12 +215,9 @@ class SMBLDMesh(SMAL, nn.Module):
     def get_meshes(self):
         """Returns Meshes object of all SMAL meshes."""
 
-        # self.meshes.update_padded(self.get_verts()[0])
-        self.meshes = ARAPMeshes(*self.get_verts())
+        self.meshes = ARAPMeshes(*self.get_verts(), device=self.device)
 
         return self.meshes
-
-
 
     def __call__(self, beta, theta, betas_extra, deform_verts=None, trans=None, get_skin=True):
 
