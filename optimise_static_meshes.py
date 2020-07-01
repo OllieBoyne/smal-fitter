@@ -63,11 +63,11 @@ def optimise_to_static_meshes(arap = True):
 
 	manager = StageManager(out_dir=out_dir)
 
-	nits = 300
-	# manager.add_stage( Stage(100, SMBLD.smbld_params, SMBLD, name="1 - Initial fit", lr=1e-1, **stage_kwaargs) )
-	# manager.add_stage( Stage(nits, SMBLD.smbld_params, SMBLD, name="2 - Refine", lr=1e-3,  **stage_kwaargs) )
+	nits = 1000
+	manager.add_stage( Stage(100, SMBLD.smbld_params, SMBLD, name="1 - Initial fit", lr=1e-1, **stage_kwaargs) )
+	manager.add_stage( Stage(nits, SMBLD.smbld_params, SMBLD, name="2 - Refine", lr=1e-3,  **stage_kwaargs) )
 	name = "3 - deform arap" if arap else "3 - deform"
-	manager.add_stage( Stage(100, SMBLD.deform_params, SMBLD, name=name, loss_weights=deform_weights,
+	manager.add_stage( Stage(200, SMBLD.deform_params, SMBLD, name=name, loss_weights=deform_weights,
 				   lr=2e-2, **stage_kwaargs) )
 
 	manager.run()

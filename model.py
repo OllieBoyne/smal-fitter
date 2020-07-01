@@ -89,19 +89,20 @@ def save_new_model(verts, n_betas=20, out_dir = "smbld_model/new_model",
     new_betas = get_betas(verts, new_vtemplate, new_shapedir)
     beta_means = new_betas.mean(axis=0)
     beta_covs = np.cov(new_betas.T)
-    
 
-    data['cluster_means'][shape_family] = beta_means
-    data['cluster_covs'][shape_family] = beta_covs
+    # clear cluster means etc, remake
+    data['cluster_labels'] = ['unity_dog']
+    data['cluster_means'] = [beta_means]
+    data['cluster_cov'] = [beta_covs]
 
-    # with open(outfile_data, "wb") as outfile:
-        # pkl.dump(data, outfile)
+    with open(outfile_data, "wb") as outfile:
+        pkl.dump(data, outfile)
 
 
   
 if __name__ == "__main__":
 
-    data = np.load("static_fits_output/smbld_params_arap_old.npz")
+    data = np.load("static_fits_output/smbld_params_arap.npz")
     verts = data["verts"]
 
     save_new_model(verts)
