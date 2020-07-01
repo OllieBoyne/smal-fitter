@@ -43,7 +43,7 @@ class StageManager:
 		it_start = 0 # track number of its
 		for stage in self.stages:
 			n_it = stage.n_it
-			ax.plot(np.arange(it_start, it_start+n_it), stage.losses, label=stage.name)
+			ax.semilogy(np.arange(it_start, it_start+n_it), stage.losses, label=stage.name)
 			it_start += n_it
 
 		ax.legend()
@@ -155,7 +155,7 @@ class Stage:
 			## Before stepping, save current verts for next step of ARAP
 			self.prev_mesh = new_src_mesh.clone()
 			self.prev_verts = src_verts.clone()
-
+	
 		# Optimization step
 		# profile_backwards(loss)
 		# back = lambda: loss.backward()
