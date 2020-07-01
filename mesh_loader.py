@@ -32,8 +32,8 @@ def load_target_meshes(mesh_dir, sorting = lambda arr: arr, n_meshes=None, frame
 		verts = verts /scale
 
 		# ROTATE TARGET MESH TO GET IN DESIRED DIRECTION
-		R1 = cartesian_rotation("z", np.pi/2)
-		R2 = cartesian_rotation("y", np.pi/2)
+		R1 = cartesian_rotation("z", np.pi/2).to(device)
+		R2 = cartesian_rotation("y", np.pi/2).to(device)
 		verts = torch.mm(verts, R1.T)
 		verts = torch.mm(verts, R2.T)
 

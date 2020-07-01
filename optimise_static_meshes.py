@@ -17,9 +17,10 @@ from optimiser import Stage, StageManager
 
 # Set the device
 if torch.cuda.is_available():
-	device = torch.device("cuda:0,1")
+	device = torch.device("cuda:0")
 
-device = torch.device("cpu")
+else:
+	device = torch.device("cpu")
 
 
 targ_dirs = ["static_meshes", "static_fits_output"]
@@ -32,7 +33,7 @@ def optimise_to_static_meshes(arap = True):
 	mesh_names, target_meshes = load_target_meshes(mesh_dir=r"static_meshes", device=device)
 
 	## only take first mesh for now
-	# mesh_names, target_meshes = mesh_names[:3], target_meshes[:3]
+	# mesh_names, target_meshes = mesh_names[:1], target_meshes[:1]
 
 	n_batch = batch_size = len(target_meshes)  # Size of all meshes in batch
 
@@ -42,7 +43,7 @@ def optimise_to_static_meshes(arap = True):
 	verts, faces_idx = SMBLD.get_verts()
 	src_mesh = Meshes(verts, faces_idx)
 
-	plot_meshes(target_meshes, src_mesh, mesh_names=mesh_names, title="0 - Init", figtitle="Initialisation")
+	# plot_meshes(target_meshes, src_mesh, mesh_names=mesh_names, title="0 - Init", figtitle="Initialisation")
 
 	out_dir = r"static_fits_output"
 
@@ -56,17 +57,17 @@ def optimise_to_static_meshes(arap = True):
 	)
 
 	if arap: 
-		deform_weights["w_arap"] = 0.0001
-		deform_weights["w_normal"] = 0.0002
-		deform_weights["w_laplacian"] = 0.0001
+		deform_weights["w_arap"] = 0.01
+		deform_weights["w_normal"] = 0.002
+		# deform_weights["w_laplacian"] = 0.001
 
 	manager = StageManager(out_dir=out_dir)
 
 	nits = 300
-	manager.add_stage( Stage(100, SMBLD.smbld_params, SMBLD, name="1 - Initial fit", lr=1e-1, **stage_kwaargs) )
-	manager.add_stage( Stage(nits, SMBLD.smbld_params, SMBLD, name="2 - Refine", lr=1e-3,  **stage_kwaargs) )
+	# manager.add_stage( Stage(100, SMBLD.smbld_params, SMBLD, name="1 - Initial fit", lr=1e-1, **stage_kwaargs) )
+	# manager.add_stage( Stage(nits, SMBLD.smbld_params, SMBLD, name="2 - Refine", lr=1e-3,  **stage_kwaargs) )
 	name = "3 - deform arap" if arap else "3 - deform"
-	manager.add_stage( Stage(150, SMBLD.deform_params, SMBLD, name=name, loss_weights=deform_weights,
+	manager.add_stage( Stage(100, SMBLD.deform_params, SMBLD, name=name, loss_weights=deform_weights,
 				   lr=2e-2, **stage_kwaargs) )
 
 	manager.run()
@@ -80,5 +81,5 @@ def optimise_to_static_meshes(arap = True):
 
 
 if __name__ == "__main__":
-	optimise_to_static_meshes(arap = False)
+	# optimise_to_static_meshes(arap = False)
 	optimise_to_static_meshes(arap = True)

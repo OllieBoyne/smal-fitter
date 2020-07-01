@@ -120,11 +120,11 @@ class SMBLDMesh(SMAL, nn.Module):
         SMAL.__init__(self, pkl_path=model_path, opts = opts, shape_family_id=shape_family_id)
         nn.Module.__init__(self)
     
-
         self.use_smal_betas = True
         self.n_batch = n_batch
         self.device = device
 
+        self.v_template=  self.v_template.to(device)
         self.faces = self.f
         faces_single = torch.from_numpy(self.faces.astype(np.float32)).to(device)
         self.faces_batch = stack_as_batch(faces_single, n_batch)

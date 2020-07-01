@@ -43,6 +43,7 @@ class SMAL(object):
         
         shapedir = np.reshape(
             undo_chumpy(dd['shapedirs']), [-1, self.num_betas]).T
+        shapedir.flags.writeable = True
         self.shapedirs = Variable(
             torch.Tensor(shapedir), requires_grad=False)
 

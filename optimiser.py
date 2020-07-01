@@ -10,6 +10,7 @@ from pytorch3d.loss import (
 from pytorch3d.structures import Meshes
 from pytorch_arap.pytorch_arap.arap import compute_energy as arap_loss
 from pytorch_arap.pytorch_arap.arap import ARAPMeshes
+from pytorch_arap.pytorch_arap.arap_utils import profile_backwards, time_function, Timer
 
 from tqdm import tqdm
 import torch
@@ -19,6 +20,7 @@ import numpy as np
 import os
 from smbld_model.smbld_mesh import SMBLDMesh
 from time import perf_counter
+import gc
 
 # default_weights = dict(w_chamfer=2.0, w_edge=1.0, w_normal=0.01, w_laplacian=0.1, w_scale=0.001, w_arap=0.001)
 default_weights = dict(w_chamfer=2.0, w_edge=0, w_normal=0, w_laplacian=0, w_arap=0)
@@ -100,6 +102,7 @@ class Stage:
 
 	def loss(self, src_mesh, src_verts):
 		loss = 0 
+
 		if self.consider_loss("chamfer"):
 			loss_chamfer, _ = chamfer_distance(self.target_verts,
 											src_verts)  # We compare the two sets of pointclouds by computing (a) the chamfer loss
@@ -127,7 +130,14 @@ class Stage:
 		# if ((self.prev_verts - src_verts) ** 2).mean() == 0 or self.loss_weights["w_arap"] == 0:
 		# 	loss_arap = 0   # no energy if vertices are not deformed
 		# else:
-			
+
+		## view size of variables
+		# for obj in gc.get_objects():
+		# 	try:
+		# 		if torch.is_tensor(obj) or (hasattr(obj, 'data') and torch.is_tensor(obj.data)):
+		# 			print(type(obj), obj.size(), obj.shape)
+		# 	except:
+		# 		pass
 
 		return loss
 
@@ -138,6 +148,7 @@ class Stage:
 		new_src_mesh = ARAPMeshes(src_verts, src_faces)
 
 		loss = self.loss(new_src_mesh, src_verts)
+		# loss = time_function(self.loss, new_src_mesh, src_verts)
 		self.losses.append(loss)
 
 		with torch.no_grad():
@@ -146,6 +157,9 @@ class Stage:
 			self.prev_verts = src_verts.clone()
 
 		# Optimization step
+		# profile_backwards(loss)
+		# back = lambda: loss.backward()
+		# time_function(back)
 		loss.backward()
 
 		self.optimizer.step()

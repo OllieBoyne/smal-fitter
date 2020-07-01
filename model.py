@@ -4,6 +4,8 @@ import numpy as np
 from smbld_model.config import SMPL_MODEL_PATH, SMPL_DATA_PATH
 import pickle as pkl 
 import os
+from sklearn.decomposition import PCA
+
 joinp = os.path.join
 
 def produce_new_shapedir(verts, n_betas=20):
@@ -26,14 +28,12 @@ def produce_new_shapedir(verts, n_betas=20):
 
     v_template = verts.mean(axis=0) # set new template verts
     offsets = (verts - v_template).reshape(N, 3*V)
-    U, S, VT = np.linalg.svd(offsets)
 
-    ## only take largest n_betas singular values
-    UL = U[:n_betas, :n_betas]
-    SL = np.diag(S[:n_betas])
+    pca = PCA(n_components = K)
 
-    shapedir = np.matmul(UL, SL)
-    print("-->", shapedir.shape)
+    fit = pca.fit(offsets)
+    shapedir = fit.components_.T
+
     return v_template, shapedir
 
 def get_betas(verts, v_template, shapedir):
@@ -47,11 +47,16 @@ def get_betas(verts, v_template, shapedir):
     :return betas: (N x nbetas)"""
 
     N, V, _ = verts.shape
+    _, B = shapedir.shape
+
     offsets = (verts - v_template).reshape(N, 3*V)
 
-    betas = np.linalg.lstsq(shapedir, offsets)[0]
+    betas = np.zeros((N, B))
 
-    # print(shapedir.shape, offsets.shape, betas.shape)
+    for n in range(N):
+        sol = np.linalg.lstsq(shapedir, offsets[n])[0]
+        betas[n] = sol
+
     return betas
 
 
@@ -71,11 +76,11 @@ def save_new_model(verts, n_betas=20, out_dir = "smbld_model/new_model",
         dd = pkl.load(f, fix_imports = True, encoding="latin1")
 
     new_vtemplate, new_shapedir = produce_new_shapedir(verts, n_betas=n_betas)
-    dd["shapedir"] = new_shapedir
+    dd["shapedirs"] = new_shapedir
+    dd["v_template"] = new_vtemplate
 
-    # print(dd)
-    # with open(outfile_model, "wb") as outfile:
-        # pkl.dump(dd, outfile)
+    with open(outfile_model, "wb") as outfile:
+        pkl.dump(dd, outfile)
 
     ### SAVE MEANS
     with open(SMPL_DATA_PATH, "rb") as f:
@@ -85,6 +90,7 @@ def save_new_model(verts, n_betas=20, out_dir = "smbld_model/new_model",
     beta_means = new_betas.mean(axis=0)
     beta_covs = np.cov(new_betas.T)
     
+
     data['cluster_means'][shape_family] = beta_means
     data['cluster_covs'][shape_family] = beta_covs
 
@@ -95,7 +101,7 @@ def save_new_model(verts, n_betas=20, out_dir = "smbld_model/new_model",
   
 if __name__ == "__main__":
 
-    data = np.load("static_fits_output/smbld_params_expmt.npz")
+    data = np.load("static_fits_output/smbld_params_arap_old.npz")
     verts = data["verts"]
 
     save_new_model(verts)
