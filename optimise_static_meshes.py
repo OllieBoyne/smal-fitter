@@ -22,30 +22,20 @@ if torch.cuda.is_available():
 else:
 	device = torch.device("cpu")
 
-
 targ_dirs = ["static_meshes", "static_fits_output"]
 try_mkdirs(targ_dirs) # produce targ dirs
 
 
-def optimise_to_static_meshes(arap = True):
+def optimise_to_static_meshes(method="parameters", n_meshes=None):
 	"""Individually optimise the SMAL model to 13 different target meshes, through a SMAL parameter optimisation stage and a vertex deformation stage. Save outputs as numpy arrays."""
 
-	mesh_names, target_meshes = load_target_meshes(mesh_dir=r"static_meshes", device=device)
-
-	## only take first mesh for now
-	mesh_names, target_meshes = mesh_names[:1], target_meshes[:1]
-
+	mesh_names, target_meshes = load_target_meshes(mesh_dir=r"static_meshes", device=device, n_meshes=n_meshes)
 	n_batch = batch_size = len(target_meshes)  # Size of all meshes in batch
 
 	SMBLD = SMBLDMesh(n_batch=n_batch, device=device, shape_family_id=-1) # use no shape family
 
-	# Load and plot initial SMAL Mesh
-	verts, faces_idx = SMBLD.get_verts()
-	src_mesh = Meshes(verts, faces_idx)
-
-	# plot_meshes(target_meshes, src_mesh, mesh_names=mesh_names, title="0 - Init", figtitle="Initialisation")
-
 	out_dir = r"static_fits_output"
+	try_mkdir(out_dir)
 
 	stage_kwaargs = {
 		"mesh_names": mesh_names,
@@ -56,29 +46,32 @@ def optimise_to_static_meshes(arap = True):
 		w_laplacian=0, w_arap=0.000, w_normal=0.00, w_edge=0.00,
 	)
 
-	if arap: 
-		deform_weights["w_arap"] = 0.01
-		deform_weights["w_normal"] = 0.002
-		# deform_weights["w_laplacian"] = 0.001
+	deform_weights["w_arap"] = 0.001
+	# deform_weights["w_normal"] = 0.02
+	# deform_weights["w_laplacian"] = 0.001
 
 	manager = StageManager(out_dir=out_dir)
 
-	manager.add_stage( Stage(200, SMBLD.smbld_params, SMBLD, name="1 - Initial fit", lr=5e-2, **stage_kwaargs) )
-	manager.add_stage( Stage(500, SMBLD.smbld_params, SMBLD, name="2 - Refine", lr=1e-2,  **stage_kwaargs) )
-	name = "3 - deform arap" if arap else "3 - deform"
-	manager.add_stage( Stage(500, SMBLD.deform_params, SMBLD, name=name, loss_weights=deform_weights,
-				   lr=1e-2, **stage_kwaargs) )
+	if method == "parameters":
+		verts, faces_idx = SMBLD.get_verts()
+		src_mesh = Meshes(verts, faces_idx)
+		plot_meshes(target_meshes, src_mesh, mesh_names=mesh_names, title="0 - Init", figtitle="Initialisation") 	# Load and plot initial SMAL Mesh
+		
+		manager.add_stage( Stage(1000, "smbld", SMBLD, name="1 - Initialise", lr=3e-2, custom_lrs={"joint_rot": 5e-3}, **stage_kwaargs) )
+		manager.add_stage( Stage(1000, "smbld", SMBLD, name="2 - Shape & pose", lr=2e-2, custom_lrs={"joint_rot": 5e-3},  **stage_kwaargs) )
+
+	elif method == "deform":
+		SMBLD.load_from_npz("static_fits_output/smbld_params_13_parameters.npz") # load from parameters stage
+
+		manager.add_stage( Stage(1500, "deform", SMBLD, name="3 - deform arap", loss_weights=deform_weights,
+					   lr=3e-3, **stage_kwaargs) )
 
 	manager.run()
-	manager.plot_losses()
+	# manager.plot_losses()
 
-	# print(SMBLD.deform_verts.mean(), SMBLD.deform_verts.sum())
-
-	# Save all SMAL params
-	try_mkdir(out_dir)
-	SMBLD.save_npz(out_dir, title=f"{['', 'arap'][arap]}")
+	SMBLD.save_npz(out_dir, title=f"{n_batch}_{method}") 	# Save all SMAL params
 
 
 if __name__ == "__main__":
-	# optimise_to_static_meshes(arap = False)
-	optimise_to_static_meshes(arap = True)
+	n_meshes = None # if None, select all available meshes
+	optimise_to_static_meshes(method="deform", n_meshes=n_meshes)

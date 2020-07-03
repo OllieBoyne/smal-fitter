@@ -117,6 +117,8 @@ class SMBLDMesh(SMAL, nn.Module):
 
     def __init__(self, n_batch = 1, fixed_betas = False, device="cuda", shape_family_id = 1,
     model_path = SMPL_MODEL_PATH, data_path = SMPL_DATA_PATH, num_betas=20, **kwargs):
+
+
         SMAL.__init__(self, model_path=model_path, data_path=data_path, opts = opts, shape_family_id=shape_family_id,
                       align = False)
         nn.Module.__init__(self)
@@ -195,6 +197,7 @@ class SMBLDMesh(SMAL, nn.Module):
 
         self.deform_verts = nn.Parameter(torch.zeros((n_batch, self.n_verts, 3), device=device, requires_grad=True))
 
+        self.smbld_shape = [self.global_rot, self.trans, self.multi_betas]
         self.smbld_params = [self.global_rot, self.joint_rot, self.trans, self.multi_betas] # params of SMBDL model
         self.deform_params = [self.deform_verts]
 
@@ -309,3 +312,12 @@ class SMBLDMesh(SMAL, nn.Module):
 
         try_mkdir(out_dir)
         np.savez(os.path.join(out_dir, out_title), **out)
+
+    def load_from_npz(self, loc):
+        """Given the location of a .npz file, load previous model"""
+
+        data = np.load(loc)
+
+        for param in ["global_rot", "joint_rot", "multi_betas", "trans"]:
+            tensor = torch.from_numpy(data[param]).to(self.device)
+            getattr(self, param).data = tensor

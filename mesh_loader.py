@@ -43,9 +43,4 @@ def load_target_meshes(mesh_dir, sorting = lambda arr: arr, n_meshes=None, frame
 
 	target_meshes = Meshes(verts=all_verts, faces=all_faces_idx) # All loaded target meshes together
 
-	# from matplotlib import pyplot as plt
-	# fig, ax = plt.subplots(subplot_kw={"projection":"3d"})
-	# plot_pointcloud(ax, target_meshes[0])
-	# plt.show()
-
 	return mesh_names, target_meshes

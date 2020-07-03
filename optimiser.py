@@ -23,7 +23,10 @@ from time import perf_counter
 import gc
 
 # default_weights = dict(w_chamfer=2.0, w_edge=1.0, w_normal=0.01, w_laplacian=0.1, w_scale=0.001, w_arap=0.001)
-default_weights = dict(w_chamfer=2.0, w_edge=0, w_normal=0, w_laplacian=0, w_arap=0)
+default_weights = dict(w_chamfer=1.0, w_edge=0, w_normal=0, w_laplacian=0, w_arap=0)
+
+## Want to vary learning ratios between parameters, 
+default_lr_ratios = []
 
 class StageManager:
 	"""Container for multiple stages of optimisation"""
@@ -55,22 +58,61 @@ class StageManager:
 		self.stages.append(stage)
 
 
+class SMBLDMeshParamGroup:
+	"""Object building on model.parameters, with modifications such as variable learning rate"""
+	param_map = {
+		"shape": ["global_rot", "trans", "multi_betas"],
+		"smbld": ["global_rot", "joint_rot", "trans", "multi_betas"],
+		"deform": ["deform_verts"]
+	}	# map of param_type : all attributes in SMBLDMesh used in optim
+
+	def __init__(self, model, group="smbld", lrs = None):
+		"""
+		:param lrs: dict of param_name : custom learning rate
+		"""
+
+		self.model = model
+
+		self.group = group
+		assert group in self.param_map, f"Group {group} not in list of available params: {list(self.param_map.keys())}"
+
+		self.lrs = {}
+		if lrs is not None:
+			for k, lr in lrs.items():
+				self.lrs[k] = lr
+
+	
+	def __iter__(self):
+		"""Return iterable list of all parameters"""
+		out = []
+
+		for param_name in self.param_map[self.group]:
+			param = [getattr(self.model, param_name)]
+			d = {"params": param}
+			if param_name in self.lrs:
+				d["lr"] = self.lrs[param_name]
+
+			out.append(d)
+
+		return iter(out)
+
+
 class Stage:
 	"""Defines a stage of optimisation, the optimisation parameters for the stage, ..."""
 
-	def __init__(self, n_it: int, parameters: list, SMBLD: SMBLDMesh, target_meshes: Meshes, mesh_names=[], name="optimise",
-				 loss_weights=None, lr=1e-3, lr_decay=1.0,out_dir="static_fits_output"):
+	def __init__(self, n_it: int, param_group: str, SMBLD: SMBLDMesh, target_meshes: Meshes, mesh_names=[], name="optimise",
+				 loss_weights=None, lr=1e-3, lr_decay=1.0, out_dir="static_fits_output",
+				 custom_lrs = None):
 		"""
 		n_its = integer, number of iterations in stage
 		parameters = list of items over which to be optimised
 		get_mesh = function that returns Mesh object for identifying losses
 		name = name of stage
 
-		other_loss_functions = Any other functions describing loss, unique to this stage
-
 		lr_decay = factor by which lr decreases at each epoch"""
+
+
 		self.n_it = n_it
-		self.parameters = parameters
 		self.name = name
 		self.out_dir = out_dir
 		self.target_meshes = target_meshes
@@ -84,8 +126,13 @@ class Stage:
 
 		self.losses = []  # Store losses for review later
 
-		# self.optimizer = torch.optim.SGD(parameters, lr=lr, momentum=momentum)
-		self.optimizer = torch.optim.Adam(parameters, lr=lr)
+		if custom_lrs is not None:
+			for attr in custom_lrs:
+				assert hasattr(SMBLD, attr), f"attr '{attr}' not in SMBLD."
+
+		self.param_group = SMBLDMeshParamGroup(SMBLD, param_group, custom_lrs)
+
+		self.optimizer = torch.optim.Adam(self.param_group, lr=lr)
 		self.scheduler = torch.optim.lr_scheduler.LambdaLR(self.optimizer, lambda epoch: lr * (
 			lr_decay) ** epoch)  # Decay of learning rate
 
@@ -126,19 +173,6 @@ class Stage:
 				loss_arap = arap_loss(self.prev_mesh, self.prev_verts, src_verts, mesh_idx=n)
 				loss += self.loss_weights["w_arap"] * loss_arap
 
-		## if verts are undeformed from last iteration, no ARAP loss
-		# if ((self.prev_verts - src_verts) ** 2).mean() == 0 or self.loss_weights["w_arap"] == 0:
-		# 	loss_arap = 0   # no energy if vertices are not deformed
-		# else:
-
-		## view size of variables
-		# for obj in gc.get_objects():
-		# 	try:
-		# 		if torch.is_tensor(obj) or (hasattr(obj, 'data') and torch.is_tensor(obj.data)):
-		# 			print(type(obj), obj.size(), obj.shape)
-		# 	except:
-		# 		pass
-
 		return loss
 
 	def step(self, epoch):
@@ -148,20 +182,15 @@ class Stage:
 		new_src_mesh = ARAPMeshes(src_verts, src_faces)
 
 		loss = self.loss(new_src_mesh, src_verts)
-		# loss = time_function(self.loss, new_src_mesh, src_verts)
 		self.losses.append(loss)
 
-		with torch.no_grad():
-			## Before stepping, save current verts for next step of ARAP
-			self.prev_mesh = new_src_mesh.clone()
-			self.prev_verts = src_verts.clone()
+		# with torch.no_grad():
+		# 	## Before stepping, save current verts for next step of ARAP
+		# 	self.prev_mesh = new_src_mesh.clone()
+		# 	self.prev_verts = src_verts.clone()
 	
 		# Optimization step
-		# profile_backwards(loss)
-		# back = lambda: loss.backward()
-		# time_function(back)
 		loss.backward()
-
 		self.optimizer.step()
 		self.scheduler.step()  # Update LR
 
