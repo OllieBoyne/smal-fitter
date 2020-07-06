@@ -12,7 +12,7 @@ models = {
 	"default": dict(name="default smal", data_path=SMPL_DATA_PATH, model_path=SMPL_MODEL_PATH,
 					shape_family_id=-1, num_betas = 20),
 	"new": dict(name="new model", data_path=NEW_DATA_PATH, model_path=NEW_MODEL_PATH,
-					shape_family_id=0, num_betas=13)
+					shape_family_id=0, num_betas=18)
 } ## Model name : SMBLDMesh kwargs
 
 # Set the device
@@ -27,11 +27,11 @@ def vis_shape_params(name="default", num_betas=20, fps=15, **model_kwargs):
 
 	mesh = SMBLDMesh(**model_kwargs, num_betas=num_betas, device = device)
 
-	fig, ax = plt.subplots(figsize=(10,10), subplot_kw={"projection": "3d"})
+	fig, ax = plt.subplots(figsize=(10,10), dpi =30, subplot_kw={"projection": "3d"})
 	trisurfs = []
 
 	num_steps = N = 2 * fps
-	# num_betas = num_betas
+	# num_betas = 2
 
 	## shape range goes from 0 -> 1 -> -1 -> 0 in equally spaced steps
 	shape_range = np.concatenate([np.linspace(0, 1, num_steps//4), np.linspace(1, -1, num_steps//2), np.linspace(-1, 0, num_steps//4)])
@@ -53,7 +53,7 @@ def vis_shape_params(name="default", num_betas=20, fps=15, **model_kwargs):
 		trisurfs[:] = plot_mesh(ax, mesh.get_meshes(), equalize=False) # get new mesh
 
 		### update text
-		fig.suptitle(f"{name.title()}\nS{cur_beta_idx} : {val:+.2f}", fontsize=30)
+		fig.suptitle(f"{name.title()}\nS{cur_beta_idx} : {val:+.2f}", fontsize=50)
 
 	ax.axis("off")
 	fig.subplots_adjust(left=0, right=1, top=1, bottom=0)
@@ -61,5 +61,5 @@ def vis_shape_params(name="default", num_betas=20, fps=15, **model_kwargs):
 
 
 if __name__ == "__main__":
-	vis_shape_params(**models["default"], fps=15)
+	# vis_shape_params(**models["default"], fps=15)
 	vis_shape_params(**models["new"], fps=15)

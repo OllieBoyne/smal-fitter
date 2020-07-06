@@ -3,10 +3,31 @@
 import numpy as np
 from smbld_model.config import SMPL_MODEL_PATH, SMPL_DATA_PATH
 import pickle as pkl 
-import os
+import os, torch
 from sklearn.decomposition import PCA
+from smbld_model.smbld_mesh import SMBLDMesh
+
+## plotting
+from matplotlib import pyplot as plt
+from utils import equal_3d_axes
 
 joinp = os.path.join
+
+def load_toy_verts(idxs: list, nbetas=20) -> np.ndarray:
+    """Given a list of toy indices, load the verts for the SMAL toys given by idxs"""
+    n_batch = len(idxs)
+    smbld = SMBLDMesh(n_batch, device = "cpu")
+
+    ### LOAD TOY DATA
+    with open(SMPL_DATA_PATH, "rb") as f:
+        data = pkl.load(f, fix_imports = True, encoding="latin1")
+        toy_betas = data['toys_betas'][idxs, :nbetas]
+
+    smbld.multi_betas.data[:, :nbetas] = torch.from_numpy(toy_betas).float()
+
+    verts, faces = smbld.get_verts()
+
+    return verts.cpu().detach().numpy()
 
 def produce_new_shapedir(verts, n_betas=20):
     """Given a matrix of batch of vertices, run PCA through SVD in order to identify 
@@ -32,7 +53,7 @@ def produce_new_shapedir(verts, n_betas=20):
     pca = PCA(n_components = K)
 
     fit = pca.fit(offsets)
-    vecs = fit.components_ * fit.singular_values_[:, None]**.5 # multiply principal unit vectors by variance
+    vecs = fit.components_ * fit.explained_variance_[:, None]**.5 # multiply principal unit vectors by variance
 
     shapedir = vecs.T.reshape(V, 3, K)
 
@@ -114,6 +135,19 @@ def check_shapes():
   
 if __name__ == "__main__":
 
-    data = np.load("static_fits_output/smbld_params_arap.npz")
-    verts = data["verts"]
-    save_new_model(verts)
+    data = np.load("static_fits_output/smbld_params_13_deform.npz")
+    unity_verts = data["verts"]
+
+    toy_verts = load_toy_verts([21, 22, 24, 24, 25])
+
+    # fig, ax = plt.subplots(subplot_kw={"projection":"3d"})
+    # v = toy_verts[3]
+    # x, y, z = v.clone().detach().cpu().unbind(1)
+    # s = ax.scatter3D(x, y, z, c="blue", alpha=0.3)
+    # equal_3d_axes(ax, x, y, z, zoom=1.5)
+    # plt.show()
+
+    all_verts = np.concatenate([unity_verts, toy_verts])
+    print(all_verts.shape)
+
+    save_new_model(all_verts)
