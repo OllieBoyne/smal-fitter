@@ -3,6 +3,8 @@ from matplotlib import pyplot as plt
 import os, torch
 from pytorch_arap.pytorch_arap import arap_utils
 from pytorch3d.structures import Meshes
+from pytorch3d.io import load_obj, save_obj
+
 
 def try_mkdir(loc):
 	if os.path.isdir(loc):
@@ -70,7 +72,7 @@ def plot_meshes(target_meshes, src_meshes, mesh_names=[], title="", figtitle="",
 		try_mkdir(out_dir)
 
 		plt.savefig(
-			f"{out_dir}/{name} - {title}.png")  # ADD BETTER NAMING CONVENTION TODO CONSIDER MESH NAMES (PASS THIS TO STAGE OBJECT?)
+			f"{out_dir}/{name} - {title}.png")
 		plt.close(fig)
 
 
@@ -150,3 +152,52 @@ def save_animation(fig, func, n_frames, fmt="gif", fps=15, title="output", callb
 	"""Save matplotlib animation."""
 
 	arap_utils.save_animation(fig, func, n_frames, fmt="gif", fps=fps, title=title, callback=True, **kwargs )
+
+def load_unity_meshes(mesh_dir: str, sorting = lambda arr: arr, n_meshes=None, frame_step=1, device="cuda:0"):
+	"""Given a dir of .obj files of Unity meshes, loads all and returns mesh names, and meshes as Mesh object.
+
+	:param mesh_dir: Location of directory of .obj files
+	:param sorting: Optional lambda function to sort listdir
+	:param n_meshes: Optional slice of first n_meshes in sorted dir
+	:param frame_step: For animations, optional step through sorted dir
+	:param device: torch device
+
+	:returns mesh_names: list of all names of mesh files loaded
+	:returns target_meshes: PyTorch3D Meshes object of all loaded meshes
+	"""
+
+	# load all meshes
+	mesh_names = []
+	all_verts, all_faces_idx = [], []
+
+	obj_list = sorting(os.listdir(mesh_dir))[::frame_step] # get sorted list of obj files, applyinfg frame step
+	if n_meshes is not None: obj_list = obj_list[:n_meshes]
+
+
+	for obj_file in obj_list:
+		mesh_names.append(obj_file[:-4]) # Get name of mesh
+		target_obj = os.path.join(mesh_dir, obj_file)
+		verts, faces, aux = load_obj(target_obj, load_textures=False) # Load mesh with no textures
+		faces_idx = faces.verts_idx.to \
+			(device) # faces is an object which contains the following LongTensors: verts_idx, normals_idx and textures_idx
+		verts = verts.to(device) # verts is a FloatTensor of shape (V, 3) where V is the number of vertices in the mesh
+
+		# Center and scale for normalisation purposes
+		centre = verts.mean(0)
+		verts = verts - centre
+		scale = max(verts.abs().max(0)[0])
+		verts = verts /scale
+
+		# ROTATE TARGET MESH TO GET IN DESIRED DIRECTION
+		R1 = cartesian_rotation("z", np.pi/2).to(device)
+		R2 = cartesian_rotation("y", np.pi/2).to(device)
+		verts = torch.mm(verts, R1.T)
+		verts = torch.mm(verts, R2.T)
+
+		all_verts.append(verts), all_faces_idx.append(faces_idx)
+
+	print(f"{len(all_verts)} target meshes loaded.")
+
+	target_meshes = Meshes(verts=all_verts, faces=all_faces_idx) # All loaded target meshes together
+
+	return mesh_names, target_meshes

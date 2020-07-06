@@ -295,16 +295,19 @@ class SMBLDMesh(SMAL, nn.Module):
         else:
             return joints
 
-    def save_npz(self, out_dir, title=""):
-        """Given a directory, saves a .npz file of all params"""
+    def save_npz(self, out_dir, title="", labels=None):
+        """Given a directory, saves a .npz file of all params
+        
+        labels: optional list of size n_batch, to save as labels for all entries"""
 
         out = {}
-        for param in ["global_rot", "joint_rot", "multi_betas", "trans"]:
+        for param in ["global_rot", "joint_rot", "multi_betas", "trans", "deform_verts"]:
             out[param] = getattr(self, param).cpu().detach().numpy()
 
         v, f = self.get_verts()
         out["verts"] = v.cpu().detach().numpy()
         out["faces"] = f.cpu().detach().numpy()
+        out["labels"] = labels
 
         out_title = "smbld_params.npz"
         if title != "":

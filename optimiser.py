@@ -46,7 +46,7 @@ class StageManager:
 		it_start = 0 # track number of its
 		for stage in self.stages:
 			n_it = stage.n_it
-			ax.semilogy(np.arange(it_start, it_start+n_it), stage.losses, label=stage.name)
+			ax.semilogy(np.arange(it_start, it_start+n_it), stage.losses_to_plot, label=stage.name)
 			it_start += n_it
 
 		ax.legend()
@@ -63,7 +63,8 @@ class SMBLDMeshParamGroup:
 	param_map = {
 		"shape": ["global_rot", "trans", "multi_betas"],
 		"smbld": ["global_rot", "joint_rot", "trans", "multi_betas"],
-		"deform": ["deform_verts"]
+		"deform": ["deform_verts"],
+		"pose": ["global_rot", "trans", "joint_rot"]
 	}	# map of param_type : all attributes in SMBLDMesh used in optim
 
 	def __init__(self, model, group="smbld", lrs = None):
@@ -109,7 +110,7 @@ class Stage:
 		get_mesh = function that returns Mesh object for identifying losses
 		name = name of stage
 
-		lr_decay = factor by which lr decreases at each epoch"""
+		lr_decay = factor by which lr decreases at each it"""
 
 
 		self.n_it = n_it
@@ -124,7 +125,7 @@ class Stage:
 			for k, v in loss_weights.items():
 				self.loss_weights[k] = v
 
-		self.losses = []  # Store losses for review later
+		self.losses_to_plot = []  # Store losses for review later
 
 		if custom_lrs is not None:
 			for attr in custom_lrs:
@@ -173,7 +174,7 @@ class Stage:
 				loss_arap = arap_loss(self.prev_mesh, self.prev_verts, src_verts, mesh_idx=n)
 				loss += self.loss_weights["w_arap"] * loss_arap
 
-		return loss
+		return loss, loss_chamfer
 
 	def step(self, epoch):
 		"""Runs step of Stage, calculating loss, and running the optimiser"""
@@ -181,8 +182,8 @@ class Stage:
 		src_verts, src_faces = self.SMBLD.get_verts()
 		new_src_mesh = ARAPMeshes(src_verts, src_faces)
 
-		loss = self.loss(new_src_mesh, src_verts)
-		self.losses.append(loss)
+		loss, loss_chamfer = self.loss(new_src_mesh, src_verts)
+		self.losses_to_plot.append(loss_chamfer)
 
 		# with torch.no_grad():
 		# 	## Before stepping, save current verts for next step of ARAP
@@ -195,7 +196,7 @@ class Stage:
 		self.scheduler.step()  # Update LR
 
 
-		return loss
+		return loss, loss_chamfer
 
 	def run(self, plot=False):
 		"""Run the entire Stage"""
@@ -203,12 +204,12 @@ class Stage:
 		with tqdm(np.arange(self.n_it)) as tqdm_iterator:
 			for i in tqdm_iterator:
 				self.optimizer.zero_grad()  # Initialise optimiser
-				loss = self.step(i)
+				loss, loss_chamfer = self.step(i)
 
-				tqdm_iterator.set_description(f"STAGE = {self.name}, LOSS = {loss:.6f}")  # Print the losses
+				tqdm_iterator.set_description(f"STAGE = {self.name}, TOT_LOSS = {loss:.6f}, LOSS_CHAMF = {loss_chamfer:.6f}")  # Print the losses
 
 		if plot:
 			figtitle = f"{self.name}, its = {self.n_it}"
 			plot_meshes(self.target_meshes, self.SMBLD.get_meshes(), self.mesh_names, title=self.name, figtitle=figtitle,
-							 out_dir=os.path.join(self.out_dir, "pointclouds"))
+							 out_dir=os.path.join(self.out_dir, "meshes"))
 
