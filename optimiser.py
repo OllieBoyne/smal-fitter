@@ -15,7 +15,7 @@ from pytorch_arap.pytorch_arap.arap_utils import profile_backwards, time_functio
 from tqdm import tqdm
 import torch
 import matplotlib.pyplot as plt
-from utils import plot_pointclouds, plot_meshes
+from vis import plot_pointclouds, plot_meshes
 import numpy as np
 import os
 from smbld_model.smbld_mesh import SMBLDMesh

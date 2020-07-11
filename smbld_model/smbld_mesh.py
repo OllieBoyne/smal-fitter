@@ -14,7 +14,7 @@ import torch
 from smbld_model.smal_model.smal_torch import batch_rodrigues
 import numpy as np
 import pickle
-from utils import stack_as_batch, try_mkdir
+from vis import stack_as_batch, try_mkdir
 from pytorch_arap.pytorch_arap.arap import ARAPMeshes
 from smbld_model.config import SMPL_MODEL_PATH, SMPL_DATA_PATH
 
