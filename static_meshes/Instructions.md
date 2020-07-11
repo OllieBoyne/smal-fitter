@@ -1,0 +1,1 @@
+Place all `.obj` files here used for static mesh fitting

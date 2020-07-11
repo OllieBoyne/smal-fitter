@@ -1,34 +1,24 @@
+import os
+import torch
+
 import numpy as np
 from matplotlib import pyplot as plt
-import os, torch
-from pytorch_arap.pytorch_arap import arap_utils
+from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+from pytorch3d.io import load_obj
 from pytorch3d.structures import Meshes
-from pytorch3d.io import load_obj, save_obj
 
+from pytorch_arap.pytorch_arap import arap_utils
+
+equal_3d_axes = arap_utils.equal_3d_axes
 
 def try_mkdir(loc):
-	if os.path.isdir(loc):
-		return None
-	os.mkdir(loc)
+	if not os.path.isdir(loc):
+		os.mkdir(loc)
+
 
 def try_mkdirs(locs):
 	for loc in locs: try_mkdir(loc)
 
-def equal_3d_axes(ax, X, Y, Z, zoom=1.0):
-	"""
-	For pyplot 3D axis, sets all axes to same lengthscale through trick found here:
-	https://stackoverflow.com/questions/13685386/matplotlib-equal-unit-length-with-equal-aspect-ratio-z-axis-is-not-equal-to"""
-
-	xmax, xmin, ymax, ymin, zmax, zmin = X.max(), X.min(), Y.max(), Y.min(), Z.max(), Z.min()
-
-	max_range = np.array([xmax - xmin, ymax - ymin, zmax - zmin]).max() / (2.0 * zoom)
-
-	mid_x = (xmax + xmin) * 0.5
-	mid_y = (ymax + ymin) * 0.5
-	mid_z = (zmax + zmin) * 0.5
-	ax.set_xlim(mid_x - max_range, mid_x + max_range)
-	ax.set_ylim(mid_y - max_range, mid_y + max_range)
-	ax.set_zlim(mid_z - max_range, mid_z + max_range)
 
 def plot_mesh(ax, mesh: Meshes, label="", colour="blue", equalize=True, zoom=1.5, alpha=1.0):
 	"""Given a PyTorch Meshes object, plot the mesh on a 3D axis"""
@@ -41,8 +31,9 @@ def plot_mesh(ax, mesh: Meshes, label="", colour="blue", equalize=True, zoom=1.5
 
 	return trisurfs
 
+
 def plot_meshes(target_meshes, src_meshes, mesh_names=[], title="", figtitle="", out_dir="static_fits_output/pointclouds"):
-	"""Plot and save fig of point clouds, with 3 figs side by side:
+	"""Plot and save fig of point clouds, with 3 sublpots side by side:
 	[target mesh, src_mesh, both]"""
 
 	for n in range(len(target_meshes)):
@@ -58,13 +49,13 @@ def plot_meshes(target_meshes, src_meshes, mesh_names=[], title="", figtitle="",
 		labels = ["target", "SMAL"]
 		for i, mesh in enumerate([target_meshes[n], src_meshes[n]]):
 			for j, ax in enumerate([axes[1 + i == 1], axes[2]]):
-				plot_mesh(ax, mesh, colour=colours[i], label=labels[i], alpha=[0.5, 1][j==0])
+				plot_mesh(ax, mesh, colour=colours[i], label=labels[i], alpha=[1, 0.5][j])
 
 		fig.suptitle(figtitle)
 		for ax in axes:
 			ax.legend()
 
-		if mesh_names == []:
+		if not mesh_names:
 			name = n
 		else:
 			name = mesh_names[n]
@@ -84,7 +75,6 @@ def plot_pointcloud(ax, mesh, label="", colour="blue",
 
 	verts = mesh.verts_packed()
 	x, y, z = verts.clone().detach().cpu().unbind(1)
-
 	s = ax.scatter3D(x, y, z, c=colour, label=label, alpha=0.3)
 
 	if equalize:
@@ -116,7 +106,7 @@ def plot_pointclouds(target_meshes, src_meshes, mesh_names=[], title="", figtitl
 		for ax in axes:
 			ax.legend()
 
-		if mesh_names == []:
+		if not mesh_names:
 			name = n
 		else:
 			name = mesh_names[n]
@@ -124,11 +114,12 @@ def plot_pointclouds(target_meshes, src_meshes, mesh_names=[], title="", figtitl
 		try_mkdir(out_dir)
 
 		plt.savefig(
-			f"{out_dir}/{name} - {title}.png")  # ADD BETTER NAMING CONVENTION TODO CONSIDER MESH NAMES (PASS THIS TO STAGE OBJECT?)
+			f"{out_dir}/{name} - {title}.png")
 		plt.close(fig)
 
+
 def cartesian_rotation(dim="x", rot=0):
-	"""Given a cartesian direction of rotation, and a rotation in radians, returns pytorch rotation matrix"""
+	"""Given a cartesian direction of rotation, and a rotation in radians, returns Tensor rotation matrix"""
 
 	i = "xyz".find(dim)
 	R = torch.eye(3)
@@ -140,6 +131,7 @@ def cartesian_rotation(dim="x", rot=0):
 
 	return R
 
+
 def stack_as_batch(tensor: torch.Tensor, n_repeats=1, dim=0) -> torch.Tensor:
 	"""Inserts new dim dimension, and stacks tensor n times along that dimension"""
 	res = tensor.unsqueeze(dim)
@@ -148,10 +140,30 @@ def stack_as_batch(tensor: torch.Tensor, n_repeats=1, dim=0) -> torch.Tensor:
 	res = res.repeat(*repeats)
 	return res
 
+
+def animator(ax):
+	"""Wrapper used for animating meshes.
+	- Clears all current trisurfs
+	- Runs func, which returns new meshes
+	- Plot these meshes.
+
+	func must contain at least verts, faces"""
+	def wrapper(func):
+		# aux is wrapper function sent to wrap around existing anim
+		def aux(frame):
+			[child.remove() for child in ax.get_children() if isinstance(child, Poly3DCollection)]
+			kwargs = func(frame)
+			assert "mesh" in kwargs, "anim function must return 'mesh' object"
+			plot_mesh(ax, **kwargs)
+		return aux
+	return wrapper
+
+
 def save_animation(fig, func, n_frames, fmt="gif", fps=15, title="output", callback=True, **kwargs):
 	"""Save matplotlib animation."""
 
-	arap_utils.save_animation(fig, func, n_frames, fmt="gif", fps=fps, title=title, callback=True, **kwargs )
+	arap_utils.save_animation(fig, func, n_frames, fmt=fmt, fps=fps, title=title, callback=callback, **kwargs )
+
 
 def load_unity_meshes(mesh_dir: str, sorting = lambda arr: arr, n_meshes=None, frame_step=1, device="cuda:0"):
 	"""Given a dir of .obj files of Unity meshes, loads all and returns mesh names, and meshes as Mesh object.
@@ -170,7 +182,9 @@ def load_unity_meshes(mesh_dir: str, sorting = lambda arr: arr, n_meshes=None, f
 	mesh_names = []
 	all_verts, all_faces_idx = [], []
 
-	obj_list = sorting(os.listdir(mesh_dir))[::frame_step] # get sorted list of obj files, applyinfg frame step
+	file_list = [f for f in os.listdir(mesh_dir) if ".obj" in f]
+
+	obj_list = sorting(file_list)[::frame_step] # get sorted list of obj files, applyinfg frame step
 	if n_meshes is not None: obj_list = obj_list[:n_meshes]
 
 

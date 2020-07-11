@@ -7,10 +7,6 @@ import os, torch
 from sklearn.decomposition import PCA
 from smbld_model.smbld_mesh import SMBLDMesh
 
-## plotting
-from matplotlib import pyplot as plt
-from utils import equal_3d_axes
-
 joinp = os.path.join
 
 def load_toy_verts(idxs: list, nbetas=20) -> np.ndarray:
@@ -53,11 +49,12 @@ def produce_new_shapedir(verts, n_betas=20):
     pca = PCA(n_components = K)
 
     fit = pca.fit(offsets)
-    vecs = fit.components_ * fit.explained_variance_[:, None]**.5 # multiply principal unit vectors by variance
+    vecs = fit.components_ * fit.explained_variance_[:, None] ** 0.5  # multiply principal unit vectors by variance
 
     shapedir = vecs.T.reshape(V, 3, K)
 
     return v_template, shapedir
+
 
 def get_betas(verts, v_template, shapedir):
     """Given a target sets of verts, template verts, and a shapedir,
@@ -132,22 +129,16 @@ def check_shapes():
             for k in dd.keys():
                 print(k, getattr(dd[k], "shape", "n/a"))
 
-  
+
 if __name__ == "__main__":
 
-    data = np.load("static_fits_output/smbld_params_13_deform.npz")
-    unity_verts = data["verts"]
+    check_shapes()
 
-    toy_verts = load_toy_verts([21, 22, 24, 24, 25])
-
-    # fig, ax = plt.subplots(subplot_kw={"projection":"3d"})
-    # v = toy_verts[3]
-    # x, y, z = v.clone().detach().cpu().unbind(1)
-    # s = ax.scatter3D(x, y, z, c="blue", alpha=0.3)
-    # equal_3d_axes(ax, x, y, z, zoom=1.5)
-    # plt.show()
-
-    all_verts = np.concatenate([unity_verts, toy_verts])
-    print(all_verts.shape)
-
-    save_new_model(all_verts)
+    # data = np.load("static_fits_output/smbld_params_13_deform.npz")
+    # unity_verts = data["verts"]
+    #
+    # toy_verts = load_toy_verts([21, 22, 24, 24, 25])
+    #
+    # all_verts = np.concatenate([unity_verts, toy_verts])
+    #
+    # save_new_model(all_verts)
