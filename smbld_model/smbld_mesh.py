@@ -203,7 +203,7 @@ class SMBLDMesh(SMAL, nn.Module):
 
         self.meshes = self.get_meshes()
 
-    def get_verts(self):
+    def get_verts(self, return_joints=False):
         """Returns vertices and faces of SMAL Model"""
         # For reference on running the forward() method of SMAL model, see smal3d_renderer.py
         smal_params = self.parameters()
@@ -221,6 +221,8 @@ class SMBLDMesh(SMAL, nn.Module):
                 torch.cat((self.global_rot, self.joint_rot.view(self.n_batch, -1)), dim = 1),
                 betas_scale_pred.to(self.device), trans=self.trans, deform_verts=self.deform_verts)
 
+        if return_joints:
+            return verts, self.faces_batch, joints_3d
         return verts, self.faces_batch # each of these have shape (n_batch, n_vert/faces, 3)
 
     def get_meshes(self):
