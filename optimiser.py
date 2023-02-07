@@ -167,7 +167,7 @@ class Stage:
 
 		if self.consider_loss("laplacian"):
 			loss_laplacian = mesh_laplacian_smoothing(src_mesh, method="uniform")  # mesh laplacian smoothing
-			loss += self.loss_weights["w_laplacian"] * loss_normal	
+			loss += self.loss_weights["w_laplacian"] * loss_laplacian
 
 		if self.consider_loss("arap"):
 			for n in range(len(self.target_meshes)):
