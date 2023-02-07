@@ -8,7 +8,7 @@ import sys, os
 joinp = os.path.join
 
 sys.path.append(os.path.dirname(sys.path[0]))
-from vis import plot_pointclouds, try_mkdir, try_mkdirs, plot_meshes, load_unity_meshes
+from utils import plot_pointclouds, try_mkdir, try_mkdirs, plot_meshes, load_unity_meshes
 import torch
 nn = torch.nn
 
@@ -32,8 +32,6 @@ def optimise_to_static_meshes(method="parameters", n_meshes=None):
 	"""Individually optimise the SMAL model to 13 different target meshes, through a SMAL parameter optimisation stage and a vertex deformation stage. Save outputs as numpy arrays."""
 
 	mesh_names, target_meshes = load_unity_meshes(mesh_dir=r"static_meshes", device=device, n_meshes=n_meshes)
-	print(mesh_names)
-	raise ValueError
 	n_batch = batch_size = len(target_meshes)  # Size of all meshes in batch
 
 	SMBLD = SMBLDMesh(n_batch=n_batch, device=device, shape_family_id=-1) # use no shape family
