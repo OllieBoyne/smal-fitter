@@ -6,7 +6,7 @@ import numpy as np
 import torch
 
 from matplotlib import pyplot as plt
-from utils import plot_mesh, save_animation, animator
+from vis import plot_mesh, save_animation, animator
 
 models = {
 	"default": dict(name="default smal", data_path=SMPL_DATA_PATH, model_path=SMPL_MODEL_PATH, shape_family_id=-1,

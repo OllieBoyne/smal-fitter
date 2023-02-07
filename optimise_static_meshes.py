@@ -8,7 +8,7 @@ import sys, os
 joinp = os.path.join
 
 sys.path.append(os.path.dirname(sys.path[0]))
-from utils import plot_pointclouds, try_mkdir, try_mkdirs, plot_meshes, load_unity_meshes
+from vis import plot_pointclouds, try_mkdir, try_mkdirs, plot_meshes, load_unity_meshes
 import torch
 nn = torch.nn
 
