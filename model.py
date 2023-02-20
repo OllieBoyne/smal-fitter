@@ -131,14 +131,4 @@ def check_shapes():
 
 
 if __name__ == "__main__":
-
     check_shapes()
-
-    # data = np.load("static_fits_output/smbld_params_13_deform.npz")
-    # unity_verts = data["verts"]
-    #
-    # toy_verts = load_toy_verts([21, 22, 24, 24, 25])
-    #
-    # all_verts = np.concatenate([unity_verts, toy_verts])
-    #
-    # save_new_model(all_verts)
